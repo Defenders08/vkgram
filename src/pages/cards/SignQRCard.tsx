@@ -160,9 +160,15 @@ export default function SignQRCard(_props: {spec: Spec}) {
       }
 
       if(!prevToken || !bytesCmp(prevToken, loginToken.token)) {
-        prevToken = loginToken.token;
         QRCodeStylingCtor = QRCodeStyling;
-        await paintQR(loginToken.token);
+        // a failed paint must not kill the polling loop: the token is only
+        // remembered once drawn, so the next tick paints it again
+        try {
+          await paintQR(loginToken.token);
+          prevToken = loginToken.token;
+        } catch(err) {
+          console.error('SignQRCard: paint error:', err);
+        }
       }
 
       if(isLoop) {

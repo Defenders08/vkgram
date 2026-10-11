@@ -35,12 +35,14 @@ import {vkMessagesSettings} from '@/vkgram/pages/messages/settings';
 import useMessagesCustomize from '@/vkgram/pages/messages/customize';
 import VKMessagesSettings from '@/vkgram/pages/messages/VKMessagesSettings';
 import VKMessagesCustomizeModal from '@/vkgram/pages/messages/VKMessagesCustomizeModal';
-import MessageRenderer from '@/vkgram/components/MessageRenderer';
+import MessageRenderer, {mediaLabel} from '@/vkgram/components/MessageRenderer';
 import VKComposer, {type ComposerReply} from '@/vkgram/components/VKComposer';
 import VKServiceMessage from '@/vkgram/components/VKServiceMessage';
 import VKPeerAvatar from '@/vkgram/components/VKPeerAvatar';
 import {clearSelection} from '@/vkgram/pages/channel/postSelection';
 import createMessageMenu from '@/vkgram/pages/messages/createMessageMenu';
+import createVKPinnedMessages from '@/vkgram/hooks/createVKPinnedMessages';
+import VKPinnedMessagesModal from '@/vkgram/pages/messages/VKPinnedMessagesModal';
 
 const AVATAR_SIZE = 46;
 const ALL_TAB = 'all';
@@ -697,6 +699,47 @@ function createDialogContextMenu(options: {
   });
 }
 
+// ── Pinned plate menu ─────────────────────────────────────────────────────────
+
+/**
+ * Меню плиты закреплённого сообщения: весь список, открепить (у кого есть право)
+ * или спрятать плиту (в канале, где закреп открепить нельзя). Окна открепления —
+ * веб-ковские, те же, что у плиты чата Web K.
+ */
+function createPinnedPlateContextMenu(options: {
+  element: HTMLElement,
+  peerId: PeerId,
+  canPin: () => boolean,
+  mid: () => number,
+  onOpenList: () => void
+}) {
+  const showUnpinPopup = (mid: number) => {
+    import('@components/popups/unpinMessage').then(({default: showPinMessagePopup}) => {
+      showPinMessagePopup(options.peerId, mid, true);
+    });
+  };
+
+  return createContextMenu({
+    buttons: [{
+      icon: 'pinlist',
+      regularText: 'Все закреплённые',
+      onClick: () => options.onOpenList()
+    }, {
+      icon: 'unpin',
+      regularText: 'Открепить',
+      onClick: () => showUnpinPopup(options.mid()),
+      verify: () => options.canPin()
+    }, {
+      icon: 'eyecross',
+      regularText: 'Скрыть',
+      onClick: () => showUnpinPopup(0),
+      verify: () => !options.canPin()
+    }],
+    listenTo: options.element,
+    findElement: () => options.element
+  });
+}
+
 // ── MessageDialogRow ──────────────────────────────────────────────────────────
 
 function MessageDialogRow(props: {
@@ -997,41 +1040,88 @@ function VKMessagesChat(props: {
   const outboxRead = createOutboxRead(() => props.peerId, isTicksChat);
 
   let scrollEl!: HTMLDivElement;
-  // the newest pin of the dialog: re-asked when the dialog changes
-  const [pinnedInfo] = createResource(
+  // Закреплённые сообщения диалога (в ветке комментариев их нет): плита под шапкой,
+  // прыжки к закрепу и список «Все закреплённые».
+  const pinned = createVKPinnedMessages(() => props.peerId, () => !props.thread);
+  // после перехода по плите она стоит на выбранном закрепе, пока пользователь не вернётся
+  // к концу истории (тогда снова работает слежение за скроллом)
+  const [pinnedLocked, setPinnedLocked] = createSignal(false);
+  const [isPinnedListOpen, setPinnedListOpen] = createSignal(false);
+  // право закреплять: в личке всегда есть, в чатах — право «pin_messages»
+  const [canPinPinned] = createResource(
     () => (props.thread ? undefined : props.peerId),
     async(peerId) => {
+      if(!peerId) return false;
       try {
-        return await rootScope.managers.appMessagesManager.getPinnedMessage(peerId);
+        return await rootScope.managers.appPeersManager.canPinMessage(peerId);
       } catch(err) {
-        console.error('VKgram: getPinnedMessage failed', err);
+        return false;
       }
     }
   );
-  // the pinned message itself: the source is the id, so it loads once the id is known
-  const [pinnedMessage] = createResource(
-    () => {
-      const maxId = pinnedInfo.latest?.maxId;
-      return maxId ? {peerId: props.peerId, maxId} : undefined;
-    },
-    async({peerId, maxId}) => {
-      try {
-        const message = await rootScope.managers.appMessagesManager.getMessageByPeer(peerId, maxId);
-        return message?._ === 'message' ? message : undefined;
-      } catch(err) {
-        console.error('VKgram: getMessageByPeer pinned failed', err);
+
+  const pinnedMessage = () => pinned.shown();
+  // превью плиты: «Автор: текст» или «Автор: Фотография» (у постов канала автора нет)
+  const pinnedPreview = () => {
+    const message = pinnedMessage();
+    if(!message) return '';
+    const senderId = (message.fromId ?? message.peerId) as PeerId;
+    const author = !!message.pFlags?.out && !isBroadcastChannel(peers[props.peerId])
+      ? 'Вы'
+      : senderId === props.peerId
+        ? ''
+        : peerTitle(peers[senderId] as User.user | Chat.chat | Chat.channel | undefined);
+    const text = message.message || mediaLabel(message);
+    return author ? `${author}: ${text}` : text;
+  };
+  const showUnpinPopup = (mid: number) => {
+    import('@components/popups/unpinMessage').then(({default: showPinMessagePopup}) => {
+      showPinMessagePopup(props.peerId, mid, true);
+    });
+  };
+
+  // «×» плиты: открепить показанный закреп; у кого права нет — спрятать плиту (как в Telegram)
+  const onPinnedUnpinClick = () => {
+    showUnpinPopup(canPinPinned() ? (pinnedMessage()?.mid ?? 0) : 0);
+  };
+
+  // клик по плите: прыжок к показанному закрепу, после него плита встаёт на следующий
+  // (более старый) закреп — по кругу, как в Telegram
+  const onPinnedClick = () => {
+    const message = pinnedMessage();
+    if(!message) return;
+    setPinnedLocked(true);
+    setPendingJump({
+      mid: message.mid,
+      done: () => {
+        if(pinned.count() > 1) pinned.setIndex((pinned.index() + 1) % pinned.count());
       }
-    }
-  );
+    });
+  };
+
+  // из списка «Все закреплённые»: окно закрывается, плита встаёт на выбранный закреп
+  // и ждёт возвращения к концу истории
+  const jumpToPinned = (mid: number) => {
+    setPinnedListOpen(false);
+    const index = pinned.list().findIndex((message) => message.mid === mid);
+    if(index !== -1) pinned.setIndex(index);
+    setPinnedLocked(true);
+    setPendingJump({mid});
+  };
+
   const [newMessagesCount, setNewMessagesCount] = createSignal(0);
   const [showNewMessagesBtn, setShowNewMessagesBtn] = createSignal(false);
   const [replyTo, setReplyTo] = createSignal<ComposerReply>();
   const [editing, setEditing] = createSignal<Message.message>();
 
-  // reply / edit belong to the dialog they were started in
+  // reply / edit belong to the dialog they were started in; a jump and the pinned
+  // plate belong to it too
   createEffect(on(() => props.peerId, () => {
     setReplyTo(undefined);
     setEditing(undefined);
+    setPendingJump(undefined);
+    setPinnedLocked(false);
+    setPinnedListOpen(false);
   }, {defer: true}));
 
   const startReply = (message: Message.message) => {
@@ -1063,11 +1153,10 @@ function VKMessagesChat(props: {
   let isLoadMorePending = false;
 
   // A job for one message of this dialog from another page (`openVKChat(peerId, {mid, kind})`): reply,
-  // edit, or scroll to it — older pages are loaded until it is found (a bounded number of times).
+  // edit, or jump to it.
   let jumpAttempts = 0;
   createEffect(() => {
     const action = vkMessageAction();
-    history.messages(); // runs again when a page arrives
     if(props.thread || !action || action.peerId !== props.peerId || history.status() === 'loading') return;
 
     if(action.kind !== 'jump') {
@@ -1080,21 +1169,40 @@ function VKMessagesChat(props: {
       return;
     }
 
-    const el = scrollEl?.querySelector<HTMLElement>(`[data-mids~="${action.mid}"]`);
+    setVKMessageAction(undefined);
+    setPendingJump({mid: action.mid});
+  });
+
+  // Scroll to a message row and flash it (the same for a jump of `openVKChat` and for the pinned plate / list).
+  const scrollToMessageMid = (el: HTMLElement) => {
+    // two frames: the scroll-to-bottom of the first render runs in one, the one of a loaded page in the other
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.scrollIntoView({block: 'center', behavior: 'auto'});
+      el.classList.add('vk-message-highlight');
+      window.setTimeout(() => el.classList.remove('vk-message-highlight'), 1800);
+    }));
+  };
+
+  // One «scroll to a message, loading older pages until it is found» routine for every jumper:
+  // the jump action of `openVKChat`, the pinned plate and the pinned list. `done` runs only
+  // when the message has actually been reached.
+  const [pendingJump, setPendingJump] = createSignal<{mid: number, done?: () => void}>();
+  createEffect(() => {
+    const jump = pendingJump();
+    history.messages(); // runs again when a page arrives
+    if(props.thread || !jump || history.status() === 'loading') return;
+
+    const el = scrollEl?.querySelector<HTMLElement>(`[data-mids~="${jump.mid}"]`);
     if(el) {
-      setVKMessageAction(undefined);
+      setPendingJump(undefined);
       jumpAttempts = 0;
-      // two frames: the scroll-to-bottom of the first render runs in one, the one of a loaded page in the other
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        el.scrollIntoView({block: 'center', behavior: 'auto'});
-        el.classList.add('vk-message-highlight');
-        window.setTimeout(() => el.classList.remove('vk-message-highlight'), 1800);
-      }));
+      jump.done?.();
+      scrollToMessageMid(el);
       return;
     }
 
     if(history.isEnd() || jumpAttempts >= 30) {
-      setVKMessageAction(undefined);
+      setPendingJump(undefined);
       jumpAttempts = 0;
       return;
     }
@@ -1305,6 +1413,40 @@ function VKMessagesChat(props: {
     lastReadKey = '';
   }, {defer: true}));
 
+  // ── Pinned plate scroll tracking ────────────────────────────────────────────
+  // Как в Telegram: плита показывает самый новый закреп не ниже нижнего видимого
+  // сообщения. После перехода по плите слежение замирает на выбранном закрепе,
+  // пока пользователь не вернётся к концу истории.
+
+  // mid последнего (нижнего) видимого сообщения истории
+  const bottomVisibleMid = () => {
+    if(!scrollEl) return undefined;
+    const limit = scrollEl.getBoundingClientRect().bottom;
+    const rows = scrollEl.querySelectorAll<HTMLElement>('[data-mids]');
+    for(let i = rows.length - 1; i >= 0; --i) {
+      if(rows[i].getBoundingClientRect().bottom <= limit) {
+        const mids = (rows[i].dataset.mids || '').split(' ').filter(Boolean);
+        return mids.length ? +mids[mids.length - 1] : undefined;
+      }
+    }
+    return undefined;
+  };
+
+  let lastPinnedSync = 0;
+  const syncPinnedPlate = () => {
+    if(props.thread || !pinned.count() || !scrollEl) return;
+    const now = Date.now();
+    if(now - lastPinnedSync < 150) return;
+    lastPinnedSync = now;
+
+    // конец истории — точка, где слежение снова получает слово (как в Web K)
+    if(scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 4) setPinnedLocked(false);
+    if(pinnedLocked()) return;
+
+    const mid = bottomVisibleMid();
+    if(mid !== undefined) pinned.syncToMid(mid);
+  };
+
   const onScroll = () => {
     if(!scrollEl) return;
     scheduleMarkRead();
@@ -1313,6 +1455,7 @@ function VKMessagesChat(props: {
       isLoadMorePending = true;
       history.loadMore();
     }
+    syncPinnedPlate();
   };
 
   return (
@@ -1406,6 +1549,54 @@ function VKMessagesChat(props: {
         </header>
       </Show>
 
+      {/* плита закреплённого сообщения, как в Telegram: меню слева, «Закреплённое
+          сообщение N из M» + превью, «×» справа; клик переходит к закрепу */}
+      <Show when={!props.thread && pinned.ready() && pinned.count() > 0 && !pinned.hidden()}>
+        <div class="vk-custom-chat-pinned">
+          <button
+            type="button"
+            class="vk-custom-chat-pinned-menu"
+            aria-label="Действия с закреплёнными сообщениями"
+            ref={(el: HTMLButtonElement) => {
+              const menu = createPinnedPlateContextMenu({
+                element: el,
+                peerId: props.peerId,
+                canPin: () => !!canPinPinned(),
+                mid: () => pinnedMessage()?.mid ?? 0,
+                onOpenList: () => setPinnedListOpen(true)
+              });
+              onCleanup(() => menu.destroy());
+            }}
+            onClick={(e) => {
+              // Web K's context menu opens on `contextmenu`: pass it the click point
+              const rect = e.currentTarget.getBoundingClientRect();
+              e.currentTarget.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true, clientX: rect.left, clientY: rect.bottom
+              }));
+            }}
+          >
+            <VKIcon name="pin" size={16} />
+          </button>
+          <button type="button" class="vk-custom-chat-pinned-main" onClick={onPinnedClick}>
+            <span class="vk-custom-chat-pinned-head">
+              <span class="vk-custom-chat-pinned-label">Закреплённое сообщение</span>
+              <Show when={pinned.count() > 1}>
+                <span class="vk-custom-chat-pinned-counter">{pinned.index() + 1} из {pinned.count()}</span>
+              </Show>
+            </span>
+            <span class="vk-custom-chat-pinned-preview">{pinnedPreview()}</span>
+          </button>
+          <button
+            type="button"
+            class="vk-custom-chat-pinned-unpin"
+            aria-label={canPinPinned() ? 'Открепить сообщение' : 'Скрыть закреплённые сообщения'}
+            onClick={onPinnedUnpinClick}
+          >
+            <VKIcon name="close" size={16} />
+          </button>
+        </div>
+      </Show>
+
       <div class="vk-custom-chat-history" ref={scrollEl!} onScroll={onScroll}>
         <Show when={history.isLoadingMore()}>
           <div class="vk-custom-chat-loading">Загрузка…</div>
@@ -1487,6 +1678,16 @@ function VKMessagesChat(props: {
           />
         </Show>
       </div>
+
+      <Show when={isPinnedListOpen()}>
+        <VKPinnedMessagesModal
+          peerId={props.peerId}
+          list={pinned.list}
+          canPin={!!canPinPinned()}
+          onClose={() => setPinnedListOpen(false)}
+          onJump={jumpToPinned}
+        />
+      </Show>
     </div>
   );
 }

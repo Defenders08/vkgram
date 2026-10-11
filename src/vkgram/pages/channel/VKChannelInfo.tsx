@@ -114,6 +114,7 @@ export function VKChannelSummary(props: {peerId: PeerId, chat: Chat.channel}) {
 
 export function VKChannelDetails(props: {peerId: PeerId, chat: Chat.channel}) {
   const {usernames, isPublic, link, isSubscribed, discussionTitle} = useChannelInfo(props);
+  const actions = createChannelActions(props.peerId);
 
   return (
     <section class="vk-block vk-channel-info" aria-labelledby="vk-channel-info-title">
@@ -137,7 +138,11 @@ export function VKChannelDetails(props: {peerId: PeerId, chat: Chat.channel}) {
 
         <Show when={discussionTitle()}>
           <dt>Обсуждение</dt>
-          <dd>{discussionTitle()}</dd>
+          <dd>
+            <button type="button" class="vk-link-button" onClick={() => actions.viewDiscussion()}>
+              {discussionTitle()}
+            </button>
+          </dd>
         </Show>
 
         <Show when={props.chat.pFlags.scam || props.chat.pFlags.fake}>

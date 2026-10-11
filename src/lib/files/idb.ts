@@ -56,7 +56,10 @@ export class IDB {
     this.log = logger(['IDB', db.name].join('-'));
     this.log('constructor');
 
-    this.openDatabase(true);
+    Promise.resolve(this.openDatabase(true)).catch(() => {});
+    // * отказ не глотается: потребители его получат, дожидаясь кэшированный
+    // * `openDbPromise` (это тот же промис) — здесь гасится только фантомная
+    // * ветка «никто не дождался первооткрывателя», она же шумит в консоли
 
     IDB.INSTANCES.push(this);
   }
@@ -106,13 +109,22 @@ export class IDB {
     }
 
     let finished = false;
-    setTimeout(() => {
-      if(!finished) {
-        request.onerror(makeError('IDB_CREATE_TIMEOUT') as any as Event);
-      }
-    }, 3000);
+    let timedOut = false;
 
     return this.openDbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+      // * таймаут сдаётся только за текущего ждущего: раньше он вызывал
+      // * `request.onerror` — хранилище помечалось недоступным, отказ навсегда
+      // * оставался в кэше, и одного медленного открытия (холодный мобильный
+      // * браузер восстанавливает убитую вкладку) хватало, чтобы приложение
+      // * прочло пустую сессию и показало страницу входа. Сам запрос
+      // * открывается дальше и по завершении сам возвращается в кэш.
+      setTimeout(() => {
+        if(finished) return;
+        timedOut = true;
+        this.openDbPromise = undefined;
+        reject(makeError('IDB_CREATE_TIMEOUT') as any as Event);
+      }, 3000);
+
       request.onsuccess = (event) => {
         finished = true;
         const db = request.result;
@@ -148,7 +160,16 @@ export class IDB {
           this.log.error('onversionchange, lol?');
         };
 
-        resolve(this.db = db);
+        this.db = db;
+        if(timedOut) {
+          // * ждущий давно ушёл: кэшируем открывшееся соединение для последующих
+          // * операций — свой более новый open перезапишет его, когда дойдёт
+          this.storageIsAvailable = true;
+          this.openDbPromise ??= db;
+          return;
+        }
+
+        resolve(db);
       };
 
       request.onerror = (event) => {

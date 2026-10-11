@@ -99,7 +99,8 @@ function isGridMedia(message: Message.message) {
 // the table shows at most this many cells; the rest is «+N» on the last one (the viewer pages through all)
 const POST_GRID_MAX = 4;
 
-function mediaLabel(message: Message.message) {
+/** Короткое имя вложения («Фотография», «Голосовое сообщение»…) — превью без текста. */
+export function mediaLabel(message: Message.message) {
   switch(message.media?._) {
     case 'messageMediaPhoto': return 'Фотография';
     case 'messageMediaDocument': {

@@ -1,7 +1,8 @@
 import {For, Show} from 'solid-js';
-import type {Chat} from '@layer';
+import type {Chat, User} from '@layer';
 import {usePeers} from '@stores/peers';
 import {AvatarNewTsx} from '@components/avatarNew';
+import peerTitle from '@/vkgram/utils/peerTitle';
 import {openVKSection} from '@/vkgram/sections';
 import {openVKChat} from '@/vkgram/pages/messages/openChat';
 import {openVKChannelPage} from '@/vkgram/pages/channel/openChannel';
@@ -11,14 +12,16 @@ import createCommonChats from '@/vkgram/hooks/createCommonChats';
 const AVATAR_SIZE = 32;
 const LIMIT = 5;
 
-type MiniPeer = {peerId: PeerId, title?: string};
+type MiniPeer = {peerId: PeerId, title?: string, subtitle?: string};
 
 /**
  * A compact block of the narrow profile column: a title with a count, the
- * first few peers (small avatar + name), «Показать все» when there are more.
- * Nothing is drawn while there is nothing to list.
+ * first few peers (small avatar + name, an optional grey line under it —
+ * e.g. an admin's custom title), «Показать все» when there are more. Nothing
+ * is drawn while there is nothing to list. Also the «Участники» and
+ * «Модераторы» blocks of the group page.
  */
-function MiniPeerBlock(props: {
+export function MiniPeerBlock(props: {
   title: string,
   total: number,
   peers: MiniPeer[],
@@ -26,7 +29,12 @@ function MiniPeerBlock(props: {
   onShowAll?: () => void
 }) {
   const peers = usePeers();
-  const titleOf = (peer: MiniPeer) => (peers[peer.peerId] as Chat.channel | Chat.chat)?.title ?? peer.title;
+  // a person's name (first + last) or a chat's title — whichever the peer is
+  const titleOf = (peer: MiniPeer) => {
+    const stored = peers[peer.peerId] as User.user | Chat.channel | Chat.chat;
+    if(stored?._ === 'user' && stored.pFlags?.deleted) return 'Удалённый аккаунт';
+    return peerTitle(stored) ?? peer.title;
+  };
 
   return (
     <Show when={props.peers.length}>
@@ -42,7 +50,12 @@ function MiniPeerBlock(props: {
               <li>
                 <button type="button" class="vk-mini-row" onClick={() => props.onOpen(peer.peerId)}>
                   <AvatarNewTsx peerId={peer.peerId} size={AVATAR_SIZE} />
-                  <span class="vk-mini-name">{titleOf(peer)}</span>
+                  <span class="vk-mini-name">
+                    {titleOf(peer)}
+                    <Show when={peer.subtitle}>
+                      <span class="vk-mini-subtitle">{peer.subtitle}</span>
+                    </Show>
+                  </span>
                 </button>
               </li>
             )}

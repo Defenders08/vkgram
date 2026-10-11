@@ -1,4 +1,4 @@
-import {createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch} from 'solid-js';
+import {createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch} from 'solid-js';
 import type {Message, MessageEntity, MessageMedia, WebPage} from '@layer';
 import type {MyInputMessagesFilter} from '@appManagers/appMessagesManager';
 import formatNumber from '@helpers/number/formatNumber';
@@ -47,9 +47,16 @@ export function VKChannelMediaItems(props: {kind: VKChannelMaterialsKind, messag
   return (
     <Switch>
       <Match when={config.layout === 'grid'}>
-        <div class="vk-channel-media-grid">
+        {/* the tile pattern of «Фотографий» (VKMediaBrowser): Web K's own box sizing
+            expands a bare 120px box to 200–368px outside a chat bubble
+            (`setAttachmentSize`), a square tile overrides it */}
+        <div class="vk-media-grid">
           <For each={props.messages}>
-            {(message) => <VKChannelPostMedia message={message} boxSize={120} />}
+            {(message) => (
+              <div class="vk-media-tile">
+                <VKChannelPostMedia message={message} boxSize={240} />
+              </div>
+            )}
           </For>
         </div>
       </Match>
@@ -99,8 +106,10 @@ export function VKChannelMediaItems(props: {kind: VKChannelMaterialsKind, messag
  * few items of the same server-side filter Web K's «Shared media» uses, and
  * the total from the same answer. A block with nothing to show is not drawn;
  * the rest of the material is Web K's own shared-media tab in a modal over the page («Показать все»).
+ * `strip` (the group page's «Медиа» tab): the photos and videos in one row
+ * that scrolls sideways, «Показать все» its last cell instead of the link below.
  */
-export default function VKChannelMedia(props: {peerId: PeerId, kind: VKChannelMaterialsKind, embedded?: boolean}) {
+export default function VKChannelMedia(props: {peerId: PeerId, kind: VKChannelMaterialsKind, embedded?: boolean, strip?: boolean, onCount?: (count: number) => void}) {
   const config = KINDS[props.kind];
   const history = createChannelHistory({
     peerId: () => props.peerId,
@@ -111,13 +120,40 @@ export default function VKChannelMedia(props: {peerId: PeerId, kind: VKChannelMa
   const items = createMemo(() => (history.messages().filter((m: any) => m._ === 'message') as Message.message[]).slice(0, config.limit));
   const total = () => history.count() ?? items().length;
 
+  // the block's owner may sort its content by type (the group page's «Медиа» tabs)
+  createEffect(() => {
+    if(history.status() === 'loaded') props.onCount?.(total());
+  });
+
   const [isModalOpen, setModalOpen] = createSignal(false);
 
   const content = () => (
     <>
-      <VKChannelMediaItems kind={props.kind} messages={items()} />
+      <Show
+        when={props.strip}
+        fallback={<VKChannelMediaItems kind={props.kind} messages={items()} />}
+      >
+        {/* one row of square tiles that scrolls sideways; «Показать все» is its
+            last cell, brought in by the scroll (a tile-sized button, so the row
+            stays even) */}
+        <div class="vk-media-strip">
+          <For each={items()}>
+            {(message) => (
+              <div class="vk-media-tile">
+                <VKChannelPostMedia message={message} boxSize={240} />
+              </div>
+            )}
+          </For>
 
-      <Show when={total() > items().length}>
+          <Show when={total() > items().length}>
+            <button type="button" class="vk-media-strip-more" onClick={() => setModalOpen(true)}>
+              Показать все
+            </button>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={!props.strip && total() > items().length}>
         <button type="button" class="vk-link-button vk-channel-more" onClick={() => setModalOpen(true)}>
           Показать все
         </button>

@@ -76,6 +76,25 @@ export default function createMessageMenu(options: {
       onClick: () => openForwardPopup(options.getMessages()),
       verify: () => canForwardPost(options.getMessages())
     }, {
+      icon: 'pin',
+      title: 'Закрепить',
+      // окно Web K: в чатах — с галочкой «уведомлять участников», в личке закрепляет сразу
+      onClick: () => {
+        import('@components/popups/unpinMessage').then(({default: showPinMessagePopup}) => {
+          showPinMessagePopup(peerId(), options.getMain().mid);
+        });
+      },
+      verify: () => managers.appPeersManager.canPinMessage(peerId()) && !options.getMain().pFlags?.pinned
+    }, {
+      icon: 'unpin',
+      title: 'Открепить',
+      onClick: () => {
+        import('@components/popups/unpinMessage').then(({default: showPinMessagePopup}) => {
+          showPinMessagePopup(peerId(), options.getMain().mid, true);
+        });
+      },
+      verify: () => managers.appPeersManager.canPinMessage(peerId()) && !!options.getMain().pFlags?.pinned
+    }, {
       icon: 'select',
       // read when the menu opens
       get title() {

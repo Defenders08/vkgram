@@ -1,6 +1,6 @@
 import type {User, Chat} from '@layer';
 
-type AnyPeer = User.user | Exclude<Chat, Chat.chatEmpty>;
+export type AnyPeer = User.user | Exclude<Chat, Chat.chatEmpty>;
 
 /** a person's name or a chat's title, whichever the peer is */
 export default function peerTitle(peer: AnyPeer | undefined): string | undefined {

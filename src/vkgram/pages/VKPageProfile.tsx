@@ -2,7 +2,7 @@ import {createMemo, createSignal, For, Match, Show, Switch} from 'solid-js';
 import type {User, UserFull} from '@layer';
 import type {MyDocument} from '@appManagers/appDocsManager';
 import rootScope from '@lib/rootScope';
-import {useUser} from '@stores/peers';
+import {useUser, usePeer} from '@stores/peers';
 import {useFullPeer} from '@stores/fullPeers';
 import {AvatarNewTsx} from '@components/avatarNew';
 import {pickAvatarAndUpload} from '@components/avatarEdit';
@@ -23,6 +23,7 @@ import VKProfileInfoRow from '@/vkgram/pages/profile/VKProfileInfoRow';
 import VKProfileMusicList from '@/vkgram/pages/profile/VKProfileMusicList';
 import {VKProfileGroups, VKProfileSubscriptions} from '@/vkgram/pages/profile/VKProfileSideBlocks';
 import VKPageUserProfile from '@/vkgram/pages/profile/VKPageUserProfile';
+import VKGroupPage from '@/vkgram/pages/group/VKGroupPage';
 import {vkProfilePeerId} from '@/vkgram/pages/profile/route';
 import {avatarViewAttrs, openPeerAvatar} from '@/vkgram/utils/openPeerAvatar';
 
@@ -35,7 +36,23 @@ export default function VKPageProfile() {
 
   return (
     <Show when={!sizes.isMobile && vkProfilePeerId()} fallback={<VKPageOwnProfile />}>
-      {(peerId) => <VKPageUserProfile peerId={peerId()} />}
+      {(peerId) => <VKPagePeerPage peerId={peerId()} />}
+    </Show>
+  );
+}
+
+/**
+ * The page of another peer inside «Моя страница»: a user — the user page, a
+ * chat (basic group / supergroup) — the group page. The peer is read from Web
+ * K's reactive peer store; until it arrives the group page's own loading state
+ * shows.
+ */
+function VKPagePeerPage(props: {peerId: PeerId}) {
+  const peer = usePeer(() => props.peerId);
+
+  return (
+    <Show when={peer()?._ !== 'user'} fallback={<VKPageUserProfile peerId={props.peerId} />}>
+      <VKGroupPage peerId={props.peerId} />
     </Show>
   );
 }

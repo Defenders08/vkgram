@@ -50,6 +50,7 @@ export type VKIconName =
   | 'link'
   | 'copy'
   | 'pin'
+  | 'unpin'
   | 'bookmark'
   | 'trash'
   | 'eye'
@@ -343,6 +344,13 @@ const ICONS: {[name in VKIconName]: () => JSX.Element} = {
     <>
       <path d="M9 4h6l-1 6 3 3.5H7L10 10 9 4Z" />
       <line x1="12" y1="13.5" x2="12" y2="20" />
+    </>
+  ),
+  unpin: () => (
+    <>
+      <path d="M9 4h6l-1 6 3 3.5H7L10 10 9 4Z" />
+      <line x1="12" y1="13.5" x2="12" y2="20" />
+      <line x1="4.5" y1="4.5" x2="19.5" y2="19.5" />
     </>
   ),
   bookmark: () => (

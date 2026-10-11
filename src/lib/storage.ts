@@ -37,6 +37,10 @@ export interface LocalStorageProxyDeleteTask extends WorkerTaskTemplate {
 }; */
 
 const THROTTLE_TIME = 16;
+// * сколько операции готовы ждать медленно открывающуюся базу (холодный мобильный
+// * браузер, восстанавливающий убитую вкладку), прежде чем считать её неисправной
+const SLOW_OPEN_BUDGET = 15000;
+const SLOW_OPEN_RETRY_AFTER = 1000;
 
 /* Storage extends {[name: string]: any} *//* Storage extends Record<string, any> */
 export default class AppStorage<
@@ -66,6 +70,9 @@ export default class AppStorage<
 
   private isEncryptable: boolean;
   private encryptedStoreName?: T['stores'][number]['encryptedName'];
+
+  // * с какого момента база не открывается; 0 — всё открылось
+  private storageUnavailableSince = 0;
 
   private log: ReturnType<typeof logger>;
 
@@ -152,6 +159,23 @@ export default class AppStorage<
     }
   }
 
+  /**
+   * Медленное открытие базы — не отсутствие базы: ответить читателю `undefined`
+   * здесь значило бы прочесть «нет сессии» и показать страницу входа. Пока не
+   * кончился бюджет ожидания, операция повторяется через секунду — к этому
+   * времени открытие обычно уже завершилось и IDB отдаёт соединение.
+   */
+  private retryAfterSlowOpen(retry: () => void) {
+    const now = Date.now();
+    this.storageUnavailableSince ||= now;
+    if(now - this.storageUnavailableSince >= SLOW_OPEN_BUDGET) {
+      return false;
+    }
+
+    setTimeout(retry, SLOW_OPEN_RETRY_AFTER);
+    return true;
+  }
+
   private _save = async() => {
     const deferred = this.saveDeferred;
     this.saveDeferred = deferredPromise();
@@ -179,10 +203,21 @@ export default class AppStorage<
         } */
 
         const storage = await this.getStorage();
-        storage.save(keys, values);
+        // * ждём: без await отказ открытия ушёл бы в отброшенный промис —
+        // * catch не сработал бы, а ключи молча потерялись
+        await storage.save(keys, values);
         // console.log('setItem: have set', key/* , value */);
       } catch(e) {
-        // this.useCS = false;
+        // * значения целы в кэше — возвращаем ключи в очередь и повторяем
+        if((e as ApiError)?.type === 'IDB_CREATE_TIMEOUT' && this.retryAfterSlowOpen(() => this.saveThrottled())) {
+          for(const key of keys) {
+            this.keysToSet.add(key);
+          }
+
+          deferred.resolve();
+          return;
+        }
+
         this.log.error('set error', e, keys, values);
       }
     }
@@ -215,8 +250,19 @@ export default class AppStorage<
         } */
 
         const storage = await this.getStorage();
-        storage.delete(keys);
+        // * та же история, что и в _save: без await отказ не дошёл бы до catch
+        await storage.delete(keys);
       } catch(e) {
+        // * значения ключей в базе не тронуты — просто возвращаем их в очередь
+        if((e as ApiError)?.type === 'IDB_CREATE_TIMEOUT' && this.retryAfterSlowOpen(() => this.deleteThrottled())) {
+          for(const key of keys) {
+            this.keysToDelete.add(key);
+          }
+
+          deferred.resolve();
+          return;
+        }
+
         this.log.error('delete error', e, keys);
       }
     }
@@ -233,6 +279,7 @@ export default class AppStorage<
 
     const storage = await this.getStorage();
     storage.get(keys as string[]).then((values) => {
+      this.storageUnavailableSince = 0;
       for(let i = 0, length = keys.length; i < length; ++i) {
         const key = keys[i];
         const deferred = this.getPromises.get(key);
@@ -245,6 +292,14 @@ export default class AppStorage<
 
       // console.log('[AS]: get time', keys, performance.now() - perf);
     }, (error: ApiError) => {
+      if(error?.type === 'IDB_CREATE_TIMEOUT' && this.retryAfterSlowOpen(() => {
+        if(this.getPromises.size) {
+          this.getThrottled();
+        }
+      })) {
+        return;
+      }
+
       const ignoreErrors: Set<ErrorType> = new Set(['NO_ENTRY_FOUND', 'STORAGE_OFFLINE']);
       if(!ignoreErrors.has(error.type)) {
         this.useStorage = false;

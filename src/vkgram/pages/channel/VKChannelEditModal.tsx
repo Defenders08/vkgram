@@ -87,6 +87,11 @@ export function VKChannelEditModal(props: {peerId: PeerId, onClose: () => void})
   };
 
   const username = () => channel() ? getPeerActiveUsernames(channel() as any)[0] : undefined;
+  // the same form serves a group: the wording follows the peer
+  const isGroup = () => {
+    const c = channel() as Chat.channel | Chat.chat | undefined;
+    return !c || c._ === 'chat' || !!c.pFlags?.megagroup;
+  };
   const rows = () => [
     {title: 'Тип канала', value: username() ? 'Публичный · @' + username() : 'Частный'},
     {title: 'Пригласительные ссылки', value: fullPeer()?.exported_invite ? 'Есть' : undefined},
@@ -95,13 +100,13 @@ export function VKChannelEditModal(props: {peerId: PeerId, onClose: () => void})
   ];
 
   return (
-    <VKModal title="Изменить канал" width={440} closeDisabled={saving()} onClose={props.onClose}>
+    <VKModal title={isGroup() ? 'Изменить группу' : 'Изменить канал'} width={440} closeDisabled={saving()} onClose={props.onClose}>
       <form class="vk-modal-form" onSubmit={save}>
         <div class="vk-modal-body vk-modal-fields">
           <div class="vk-channel-edit-head">
             <AvatarNewTsx peerId={props.peerId} size={64} />
             <div class="vk-page-text-secondary">
-              Фотографию канала можно сменить в настройках Telegram.
+              Фотографию можно сменить в настройках Telegram.
             </div>
           </div>
 

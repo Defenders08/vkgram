@@ -1471,6 +1471,11 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     }
   }
 
+  // * The members line of a group page, under the about
+  &-members {
+    margin-top: 4px;
+  }
+
   &-actions {
     display: flex;
     gap: $vk-gap-small;
@@ -2833,30 +2838,174 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
 .vk-composer.is-drag-over { border-color: var(--vk-accent, #0077ff); background: rgba(0,119,255,0.05); }
 // (кнопки форматирования — `.vk-composer-format-btn` — стилизованы в блоке .vk-format-menu в конце файла)
 
-// the pinned message: a flat plate under the header, in the VK look
+// the pinned message: a two-line plate under the header, like the pinned bar of Telegram —
+// the menu on the left, «Закреплённое сообщение N из M» with the preview, «×» on the right
 .vk-custom-chat-pinned {
   display: flex;
   flex: 0 0 auto;
-  gap: 8px;
-  align-items: baseline;
+  align-items: stretch;
   min-width: 0;
-  padding: 6px 12px;
-  border: 0;
   border-bottom: 1px solid $vk-border;
   background: $vk-accent-soft;
+
+  &:hover { background: $vk-accent-soft-hover; }
+}
+
+.vk-custom-chat-pinned-menu,
+.vk-custom-chat-pinned-unpin {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: 0;
+  background: none;
+  color: $vk-text-secondary;
+  cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  padding: 0;
+
+  &:hover { color: $vk-text; }
+}
+
+.vk-custom-chat-pinned-menu { color: $vk-link; }
+
+.vk-custom-chat-pinned-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.vk-custom-chat-pinned:hover { background: $vk-accent-soft-hover; }
-.vk-custom-chat-pinned-label { flex: none; font-weight: bold; color: $vk-link; }
-.vk-custom-chat-pinned-preview {
+
+.vk-custom-chat-pinned-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
   min-width: 0;
-  overflow: hidden;
+}
+
+.vk-custom-chat-pinned-label {
+  flex: none;
+  color: $vk-link;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.vk-custom-chat-pinned-counter {
+  flex: none;
   color: $vk-text-secondary;
+  font-size: 11px;
+}
+
+.vk-custom-chat-pinned-preview {
+  overflow: hidden;
+  color: $vk-text;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// the flash of a message the chat has jumped to (a jump of `openVKChat`, the pinned plate)
+.vk-message-highlight {
+  border-radius: $vk-radius;
+  animation: vk-message-highlight 1.8s ease-out;
+}
+
+@keyframes vk-message-highlight {
+  0%, 40% { background: $vk-accent-soft-hover; }
+  100% { background: transparent; }
+}
+
+// «Все закреплённые»: the list of the dialog's pinned messages
+.vk-pinned-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.vk-pinned-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid $vk-divider;
+
+  &:last-child { border-bottom: 0; }
+}
+
+.vk-pinned-row-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover { background: $vk-accent-soft; }
+}
+
+.vk-pinned-row-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.vk-pinned-row-author {
+  overflow: hidden;
+  color: $vk-link;
+  font-size: 12px;
+  font-weight: bold;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-pinned-row-date {
+  flex: none;
+  color: $vk-text-secondary;
+  font-size: 11px;
+}
+
+.vk-pinned-row-text {
+  overflow: hidden;
+  color: $vk-text;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-pinned-row-unpin {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  border: 0;
+  background: none;
+  color: $vk-text-secondary;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+
+  &:hover { color: $vk-danger; }
+}
+
+.vk-pinned-empty {
+  padding: 18px 12px;
+  color: $vk-text-secondary;
+  text-align: center;
 }
 
 // the right cell of the dialog header: the menu and the small avatar
@@ -3069,11 +3218,8 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     }
   }
 
-  .vk-channel-media-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: $vk-gap-small;
-  }
+  // (the media grid of the «Медиа» blocks is `.vk-media-grid` with `.vk-media-tile`
+  // children — the same tiles «Фотографий» draws)
 
   .vk-channel-files-list {
     display: flex;
@@ -3721,10 +3867,6 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
       overflow: hidden;
     }
   }
-
-  .vk-channel-media-grid .vk-message-media {
-    flex: none;
-  }
 }
 
 // * Profile, desktop: the avatar with «Изменить фотографию», the button under
@@ -3832,6 +3974,86 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     list-style: none;
   }
 
+  // * The share block of a group page reuses the channel-actions look (fused
+  // * blue row + a quiet «Заглушить» row); no styles of its own
+
+  // «Информация» of a group: the rows follow the block title directly, so the
+  // list's own top border (the user page's divider under the about) is a
+  // second line — dropped
+  .vk-group-details .vk-profile-info {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  // «Закреплённое сообщение» of a group: the post's top border is a feed
+  // separator (the channel page drops it through `.vk-channel-pinned`), under
+  // a block title it is a second line — dropped the same way
+  .vk-group-pinned .vk-channel-post {
+    padding-top: 0;
+    border-top: none;
+  }
+
+  // * The title row of a group page: the «Изменить» pencil beside the name (the
+  // * original Telegram's edit button, for those who may change the group)
+  .vk-group-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: $vk-gap;
+  }
+
+  .vk-group-title-edit {
+    flex: none;
+    align-self: center;
+    color: $vk-text-secondary;
+
+    &:hover {
+      color: $vk-link;
+    }
+  }
+
+  // * The «Сохранённое» tab of a group page's media block
+  .vk-group-saved-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 2px 0;
+    border: none;
+    background: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .vk-group-saved-name {
+    flex: none;
+    max-width: 40%;
+    overflow: hidden;
+    color: $vk-link;
+    font-weight: bold;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vk-group-saved-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: $vk-text;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vk-group-saved-date {
+    flex: none;
+    color: $vk-text-secondary;
+    font-size: 11px;
+  }
+
   .vk-mini-row {
     display: flex;
     align-items: center;
@@ -3872,6 +4094,16 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     display: block;
     overflow: hidden;
     min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // the grey line under a name («Модераторы»: an admin's custom title)
+  .vk-mini-subtitle {
+    display: block;
+    overflow: hidden;
+    color: $vk-text-secondary;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -5595,6 +5827,47 @@ html.is-vkgram.vk-modal-open {
 
     &:hover .media-container {
       transform: scale(1.04);
+    }
+  }
+
+  // «Медиа» of a group page: the same square tiles in ONE row that scrolls
+  // sideways; «Показать все» is the last cell, brought in by the scroll
+  .vk-media-strip {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    .vk-media-tile {
+      flex: none;
+      width: 120px;
+    }
+  }
+
+  .vk-media-strip-more {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 120px;
+    aspect-ratio: 1;
+    padding: 8px;
+    border: 1px solid $vk-border;
+    border-radius: $vk-radius;
+    background-color: $vk-block-bg;
+    color: $vk-link;
+    font: inherit;
+    line-height: 1.4;
+    text-align: center;
+    cursor: pointer;
+
+    &:hover {
+      background-color: $vk-hover-bg;
     }
   }
 
@@ -7518,11 +7791,8 @@ html.is-vkgram.vk-modal-open {
       color: $vk-text-secondary;
     }
 
-    .vk-channel-page .vk-channel-media-grid {
-      display: grid;
+    .vk-channel-page .vk-media-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 3px;
-      width: 100%;
     }
 
     .vk-channel-page .vk-channel-files-list,
