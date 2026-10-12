@@ -19,7 +19,7 @@ import type {VKIconName} from '@/vkgram/components/VKIcons';
 // how long typing may pause before the search is sent (ms)
 const SEARCH_DELAY = 400;
 
-export type VKMediaKind = 'photos' | 'videos' | 'docs' | 'music' | 'voice';
+export type VKMediaKind = 'media' | 'photos' | 'videos' | 'docs' | 'music' | 'voice';
 export type VKMediaSource = 'search' | 'saved';
 
 const KINDS: {[kind in VKMediaKind]: {
@@ -29,6 +29,14 @@ const KINDS: {[kind in VKMediaKind]: {
   placeholder: string,
   empty: {[source in VKMediaSource]: string}
 }} = {
+  // photos and videos together («Медиа» of the search block — Telegram's own combined filter)
+  media: {
+    filter: 'inputMessagesFilterPhotoVideo',
+    layout: 'grid',
+    icon: 'photos',
+    placeholder: 'Поиск медиа',
+    empty: {search: 'Медиа не найдено', saved: 'В «Избранном» нет медиа'}
+  },
   photos: {
     filter: 'inputMessagesFilterPhotos',
     layout: 'grid',

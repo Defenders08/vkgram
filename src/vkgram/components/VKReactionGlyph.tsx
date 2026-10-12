@@ -46,9 +46,16 @@ function CustomEmoji(props: {docId: string, size: number}) {
   );
 }
 
+// символы вроде ❤ (U+2764) без VS16 браузер рисует монохромным шрифтовым глифом:
+// эмодзи из таких диапазонов принудительно переключаем на цветную презентацию
+const TEXT_PRESENTATION = /[\u00A9\u00AE\u203C\u2049\u2122\u2139\u2194-\u21AA\u231A-\u23FA\u24C2\u25AA-\u25FE\u2600-\u27BF\u2934\u2935\u2B05-\u2B55\u3030\u303D\u3297\u3299]$/;
+
 // the text form of a reaction that has one: an emoji, or the paid star
 function plainGlyph(reaction: Reaction) {
-  if(reaction._ === 'reactionEmoji') return reaction.emoticon;
+  if(reaction._ === 'reactionEmoji') {
+    const emoticon = reaction.emoticon;
+    return !emoticon.includes('\uFE0F') && TEXT_PRESENTATION.test(emoticon) ? emoticon + '\uFE0F' : emoticon;
+  }
   if(reaction._ === 'reactionPaid') return '⭐';
   return CUSTOM_PLACEHOLDER;
 }

@@ -1,6 +1,7 @@
-import {createSignal, onCleanup, onMount, Show} from 'solid-js';
+import {createEffect, createMemo, createSignal, on, onCleanup, onMount, Show} from 'solid-js';
 import type {Chat, User} from '@layer';
 import {AvatarNewTsx} from '@components/avatarNew';
+import {readAvatarSnapshot, writeAvatarSnapshotFromImage} from '@/vkgram/utils/avatarSnapshots';
 
 type AnyPeer = User.user | Chat.chat | Chat.channel | undefined;
 
@@ -30,21 +31,104 @@ export function peerInitials(peer: AnyPeer) {
 export default function VKPeerAvatar(props: {peerId: PeerId, peer?: AnyPeer, size: number}) {
   let root!: HTMLSpanElement;
   const [showFallback, setShowFallback] = createSignal(false);
+  // сорвавшуюся загрузку аватара (глюк сети, FILE_ID_INVALID у устаревшего кэша пира)
+  // повторяем пару раз — повтор идёт через загрузчик Web K, ответ на повтор приходит
+  // из его постоянного файлового кэша, как у оригинального клиента
+  const [retryVersion, setRetryVersion] = createSignal(0);
+  let retryTimer: number | undefined;
+  // картинки, из которых снимок уже сохранён (событие load и наблюдатель дублируют друг друга)
+  const snapshotSaved = new WeakSet<HTMLImageElement>();
+
+  // Снимок аватара: красится синхронно прямо при рендере строки, пока настоящий
+  // аватар (из постоянного кэша Web K) доезжает асинхронно, — после перезагрузки
+  // страницы аватарки не мигают заглушкой
+  const [snapshot, setSnapshot] = createSignal(readAvatarSnapshot(props.peerId));
+
+  // Каждый пересчёт списка диалогов приносит новые объекты dialog.peerId, а
+  // AvatarNewTsx перерисовывает аватар по смене ссылки peerId — выходит
+  // мигание при каждом обновлении. Пропускаем внутрь PeerId, стабильный
+  // по строке: новый объект того же пира ничего не перезапускает.
+  const stablePeerId = createMemo((prev: PeerId | undefined) => {
+    const id = props.peerId;
+    return prev !== undefined && String(prev) === String(id) ? prev : id;
+  });
+
+  // другой диалог — счётчик повторов и снимок заново
+  createEffect(on(stablePeerId, (id) => {
+    window.clearTimeout(retryTimer);
+    setRetryVersion(0);
+    setShowFallback(false);
+    setSnapshot(readAvatarSnapshot(id));
+  }, {defer: true}));
+
+  const scheduleRetry = () => {
+    const attempt = retryVersion();
+    if(attempt >= 2) return;
+    window.clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(() => {
+      setRetryVersion(attempt + 1);
+      setShowFallback(false);
+    }, attempt === 0 ? 5000 : 20000);
+  };
+  onCleanup(() => window.clearTimeout(retryTimer));
+
+  // миниатюра-превью (stripped thumb) не считается: её битость не ломает аватар —
+  // основная картинка поверх всё равно грузится
+  const isMainImage = (image: EventTarget) =>
+    image instanceof HTMLImageElement && !image.classList.contains('avatar-photo-thumbnail');
 
   const handleImageError = (event: Event) => {
-    if(event.target instanceof HTMLImageElement) setShowFallback(true);
+    if(isMainImage(event.target)) {
+      setShowFallback(true);
+      scheduleRetry();
+    }
   };
 
   const handleImageLoad = (event: Event) => {
-    if(event.target instanceof HTMLImageElement) setShowFallback(false);
+    // фолбэк снимает только реальная загрузка картинки — наблюдатель внизу включает,
+    // но не выключает его, иначе он циклит с загрузкой и аватар «мигает»
+    if(isMainImage(event.target)) {
+      const image = event.target as HTMLImageElement;
+      setShowFallback(false);
+      // настоящий аватар доехал: снимок больше не нужен и обновляется на свежий
+      setSnapshot(undefined);
+      if(!snapshotSaved.has(image)) {
+        snapshotSaved.add(image);
+        writeAvatarSnapshotFromImage(stablePeerId(), image);
+      }
+    }
   };
 
   onMount(() => {
     root.addEventListener('error', handleImageError, true);
     root.addEventListener('load', handleImageLoad, true);
 
-    const image = root.querySelector('img');
-    if(image?.complete && image.naturalWidth === 0) setShowFallback(true);
+    // Аватар Web K грузится лениво и может заменить картинку в любой момент:
+    // разовая проверка при монтировании пропускает битые <img> (ошибка до того,
+    // как картинка попала в DOM, смена src, реюз узла). Наблюдатель при любом
+    // изменении DOM включает фолбэк, если основная картинка битая; пока картинка
+    // ещё грузится, решения не принимаем — за это отвечают события error / load.
+    const checkImages = () => {
+      const images = Array.from(root.querySelectorAll('img')).filter(isMainImage);
+      if(!images.length || images.some((image) => !image.complete)) return;
+      if(images.every((image) => image.naturalWidth === 0)) {
+        setShowFallback(true);
+        scheduleRetry();
+      } else if(images.every((image) => image.naturalWidth > 0)) {
+        // страховка: если событие load пропустили (картинка вставилась и загрузилась
+        // до подписки), снимок всё равно обновляем — по факту увиденной картинки
+        for(const image of images) {
+          if(snapshotSaved.has(image)) continue;
+          snapshotSaved.add(image);
+          writeAvatarSnapshotFromImage(stablePeerId(), image);
+        }
+      }
+    };
+    const observer = new MutationObserver(checkImages);
+    observer.observe(root, {childList: true, subtree: true, attributeFilter: ['src']});
+    checkImages();
+
+    onCleanup(() => observer.disconnect());
   });
 
   onCleanup(() => {
@@ -59,7 +143,15 @@ export default function VKPeerAvatar(props: {peerId: PeerId, peer?: AnyPeer, siz
       classList={{'has-fallback': showFallback()}}
       style={{width: `${props.size}px`, height: `${props.size}px`}}
     >
-      <AvatarNewTsx peerId={props.peerId} size={props.size} />
+      <Show when={snapshot()}>
+        <img class="vk-peer-avatar-snapshot" src={snapshot()} alt="" aria-hidden="true" />
+      </Show>
+      {/* retryVersion пересоздаёт AvatarNewTsx — это и есть повтор загрузки;
+          when = version + 1, чтобы 0 не попал в «ложь»; у функции ребёнка обязан
+          быть параметр, иначе Show считает её статичным элементом и не меняет */}
+      <Show when={retryVersion() + 1} keyed>
+        {(version: number) => <AvatarNewTsx peerId={stablePeerId()} size={props.size} data-version={version} />}
+      </Show>
       <Show when={showFallback()}>
         <span class="vk-peer-avatar-fallback" aria-hidden="true">{peerInitials(props.peer)}</span>
       </Show>

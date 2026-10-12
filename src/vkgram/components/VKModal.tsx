@@ -1,17 +1,7 @@
 import {createUniqueId, JSX, onCleanup, onMount} from 'solid-js';
 import {Portal} from 'solid-js/web';
 import VKIcon from '@/vkgram/components/VKIcons';
-
-// what the Tab key can land on inside the dialog
-const FOCUSABLE = [
-  'a[href]',
-  'button:not(:disabled)',
-  'input:not(:disabled):not([type="hidden"])',
-  'select:not(:disabled)',
-  'textarea:not(:disabled)',
-  '[contenteditable]:not([contenteditable="false"])',
-  '[tabindex]:not([tabindex="-1"])'
-].join(',');
+import containTabFocus from '@/vkgram/utils/containTabFocus';
 
 // the first thing worth typing into
 const FIELD = 'input:not(:disabled):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea:not(:disabled), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
@@ -101,27 +91,7 @@ export default function VKModal(props: {
 
     if(e.key !== 'Tab') return;
 
-    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
-    .filter((el) => el.getClientRects().length);
-    if(!items.length) {
-      e.preventDefault();
-      dialog.focus();
-      return;
-    }
-
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if(!dialog.contains(active) || active === dialog) {
-      e.preventDefault();
-      (e.shiftKey ? last : first).focus();
-    } else if(e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if(!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    containTabFocus(dialog, e);
   };
 
   // the visible part of the screen: on a phone the keyboard covers the bottom of a fixed layer

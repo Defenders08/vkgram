@@ -757,13 +757,13 @@ export class AppMediaPlaybackController extends EventListenerBase<{
       if(IS_APPLE) {
         if(IS_TOUCH_SUPPORTED) {
           artwork.push({
-            src: `assets/img/apple-touch-icon-precomposed.png`,
+            src: `assets/img/vkgram-apple-touch-icon-precomposed.png`,
             sizes: '180x180',
             type: 'image/png'
           });
         } else {
           artwork.push({
-            src: `assets/img/apple-touch-icon.png`,
+            src: `assets/img/vkgram-apple-touch-icon.png`,
             sizes: '180x180',
             type: 'image/png'
           });
@@ -772,7 +772,7 @@ export class AppMediaPlaybackController extends EventListenerBase<{
         [72, 96, 144, 192, 256, 384, 512].forEach((size) => {
           const sizes = `${size}x${size}`;
           artwork.push({
-            src: `assets/img/android-chrome-${sizes}.png`,
+            src: `assets/img/vkgram-icon-${size}.png`,
             sizes,
             type: 'image/png'
           });

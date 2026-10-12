@@ -6,6 +6,8 @@ import type {VKSectionId} from '@/vkgram/sections';
 import VKHeaderAccount from '@/vkgram/components/VKHeaderAccount';
 import {confirmVKLogout} from '@/vkgram/logout';
 import VKHeaderSearch from '@/vkgram/components/VKHeaderSearch';
+import {VKSearchPopup} from '@/vkgram/components/VKSearchOverlay';
+import {closeVKSearch, isVKSearchOpen, openVKSearch} from '@/vkgram/search/vkSearchOpen';
 import VKHeaderSettings, {VKHeaderSettingsMobile} from '@/vkgram/components/VKHeaderSettings';
 import VKMiniPlayer from '@/vkgram/components/VKMiniPlayer';
 import VKIcon from '@/vkgram/components/VKIcons';
@@ -93,6 +95,21 @@ export default function VKHeader(props: VKHeaderProps) {
 
         <div class="vk-header-spacer" />
 
+        {/* поиск — тот же блок, что на десктопе: на телефоне он открывается кнопкой в баре */}
+        <Show when={props.variant === 'mobile'}>
+          <button
+            type="button"
+            class="vk-header-action vk-header-action-icon"
+            title="Поиск"
+            aria-label="Поиск"
+            aria-haspopup="dialog"
+            aria-expanded={isVKSearchOpen()}
+            onClick={() => isVKSearchOpen() ? closeVKSearch() : openVKSearch()}
+          >
+            <VKIcon name="search" size={18} />
+          </button>
+        </Show>
+
         <Show when={props.variant === 'desktop'}>
           <VKMiniPlayer variant="header" />
           <VKHeaderSearch />
@@ -130,6 +147,12 @@ export default function VKHeader(props: VKHeaderProps) {
         </Show>
 
       </div>
+
+      {/* окно поиска на телефоне: anchored к шапке, во всю её ширину (см.
+          `.vk-header.is-mobile .vk-search-popup`) */}
+      <Show when={props.variant === 'mobile'}>
+        <VKSearchPopup />
+      </Show>
     </header>
   );
 }

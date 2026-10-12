@@ -872,7 +872,8 @@ export class UiNotificationsManager {
     const ctx = canvas.getContext('2d');
     ctx.beginPath();
     ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI, false);
-    ctx.fillStyle = '#3390ec';
+    // VKgram перекрашивает кружок в свой синий через --vk-blue; без темы Web K остаётся прежний цвет
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--vk-blue').trim() || '#3390ec';
     ctx.fill();
 
     let fontSize = 24;

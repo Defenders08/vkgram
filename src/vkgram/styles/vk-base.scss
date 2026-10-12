@@ -759,7 +759,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   }
 }
 
-// * Header search (dropdown of the local results)
+// * Header search (the button that opens the full-screen search block)
 
 .vk-header-search {
   position: relative;
@@ -768,6 +768,11 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   flex: 0 0 $vk-rail-width;
   min-width: 140px;
   margin-left: 20px;
+  // во всю высоту бара (как якорь «Настроек»): окно поиска отходит от низа
+  // бара, а не от края самого поля
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 
   &-icon {
     position: absolute;
@@ -797,6 +802,8 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     pointer-events: none;
   }
 
+  // the field itself: dark like a button until the search is open, then white —
+  // the size never changes (26px), only the colors (as in the old VK's field)
   &-input {
     box-sizing: border-box;
     width: 100%;
@@ -809,8 +816,9 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
     font: inherit;
     outline: none;
     appearance: none;
-    // the longer placeholder («Поиск людей и сообществ») is cut with «…» in a narrow bar
+    // the placeholder is cut with «…» in a narrow bar
     text-overflow: ellipsis;
+    -webkit-tap-highlight-color: transparent;
 
     &::placeholder {
       color: rgba(255, 255, 255, .7);
@@ -820,8 +828,10 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
       appearance: none;
     }
 
-    // focused: the field turns white, the icon follows
-    &:focus {
+    // active search: the open window under the field (or the focus itself)
+    // turns it white, the icon follows
+    &:focus,
+    &.is-active {
       background-color: $vk-block-bg;
       color: $vk-text;
 
@@ -830,99 +840,301 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
       }
     }
   }
-
-  &-list {
-    position: absolute;
-    top: calc(100% + 4px);
-    // the field is narrower than the list: the list grows to the left, not past the page edge
-    right: 0;
-    z-index: 10;
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 260px;
-    max-height: min(420px, 70vh);
-    margin: 0;
-    padding: 0;
-    overflow-y: auto;
-    list-style: none;
-    color: $vk-text;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
-  }
-
-  &-empty {
-    padding: 10px $vk-gap;
-    color: $vk-text-secondary;
-  }
-
-  &-group {
-    & + & {
-      border-top: 1px solid $vk-divider;
-    }
-
-    &-title {
-      padding: 5px $vk-gap;
-      background-color: $vk-page-bg;
-      color: $vk-text-secondary;
-      font-size: 11px;
-      font-weight: bold;
-    }
-
-    &-list {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-  }
-
-  &-item {
-    display: flex;
-    align-items: center;
-    gap: $vk-gap;
-    width: 100%;
-    padding: 6px $vk-gap;
-    border: none;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
-
-    &.is-active {
-      background-color: $vk-hover-bg;
-    }
-
-    &-info {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    &-title {
-      overflow: hidden;
-      font-weight: bold;
-      color: $vk-link;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    &-sub {
-      overflow: hidden;
-      color: $vk-text-secondary;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
 }
 
 // the icon comes before the input in the DOM, so it is recolored through :has
-.vk-header-search:has(.vk-header-search-input:focus) .vk-header-search-icon {
+.vk-header-search:has(.vk-header-search-input:focus) .vk-header-search-icon,
+.vk-header-search:has(.vk-header-search-input.is-active) .vk-header-search-icon {
   color: $vk-text-secondary;
 }
 
-// so is the ring of the connection status: the field turns white on focus
-.vk-header-search:has(.vk-header-search-input:focus) .vk-header-search-spinner {
+// so is the ring of the connection status: the field turns white while the search is open
+.vk-header-search:has(.vk-header-search-input:focus) .vk-header-search-spinner,
+.vk-header-search:has(.vk-header-search-input.is-active) .vk-header-search-spinner {
   border-color: rgba(0, 0, 0, .12);
   border-top-color: $vk-text-secondary;
+}
+
+// * Search popup — the small window under the header search (the original
+// * VK's results window: the field, the «Чаты / Каналы / Приложения / Посты /
+// * Медиа» tabs, the frequent chats strip on an empty query). Opens and folds
+// * back into the field with the panel of «Настройки»'s animation.
+
+.vk-search-popup {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-height: min(560px, calc(100vh - 90px));
+  overflow: hidden; // the rounded corners clip the scroll area
+  background-color: $vk-block-bg;
+  border: 1px solid $vk-border;
+  border-radius: $vk-radius-card;
+  // the light shadow of the header panels («Настройки»), not the modal one
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .16);
+  color: $vk-text;
+  // unfolds from the field and folds back into it — the keyframes of the
+  // settings panel, shared (see `vk-settings-in` / `vk-settings-out`)
+  transform-origin: top right;
+  animation: vk-settings-in .16s ease-out;
+
+  &.is-closing {
+    animation: vk-settings-out .14s ease-in forwards;
+    pointer-events: none;
+  }
+
+  // the window does not move for those who asked the system for less motion
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    &.is-closing {
+      animation: none;
+    }
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+// desktop: anchored to the header field, grows to the left (as the old dropdown did)
+.vk-header-search .vk-search-popup {
+  top: calc(100% + 4px);
+  right: 0;
+  width: 300px;
+  max-width: calc(100vw - 20px);
+}
+
+// phone: the whole width under the bar, as tall as the screen between the bars allows
+.vk-header.is-mobile .vk-search-popup {
+  top: 100%;
+  left: 0;
+  right: 0;
+  width: auto;
+  max-height: calc(100dvh - var(--vk-mobile-header-height) - var(--vk-mobile-nav-height) - 8px);
+  transform-origin: top center;
+}
+
+.vk-search-head {
+  flex: none;
+  padding: 8px 10px;
+}
+
+.vk-search-field {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+
+  .vk-search-field-icon {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    transform: translateY(-50%);
+    color: $vk-text-secondary;
+    pointer-events: none;
+  }
+}
+
+.vk-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 31px;
+  border: 1px solid $vk-border;
+  border-radius: $vk-radius;
+  background-color: $vk-block-bg;
+  color: $vk-text;
+  font: inherit;
+  outline: none;
+  appearance: none;
+
+  &::placeholder {
+    color: $vk-text-secondary;
+  }
+
+  &::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  // focused: the blue border of the original's field
+  &:focus {
+    border-color: $vk-blue;
+  }
+}
+
+.vk-search-scroll {
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow-y: auto;
+  // the end of the list must not pull the page under the window along
+  overscroll-behavior: contain;
+  padding: $vk-gap;
+}
+
+// the tabs sit on the window's own divider; three classes deep to beat `.vkgram .vk-tabs`
+.vk-search-popup .vk-search-tabs-block {
+  flex: none;
+  padding: 0 10px;
+
+  .vk-tabs {
+    width: 100%;
+    margin: 0;
+    border-bottom: 1px solid $vk-divider;
+  }
+
+  // the strip is one line that scrolls sideways; the open tab's underline lies on the divider
+  .vk-tabs-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+}
+
+.vk-search-results-block {
+  overflow: hidden; // the rows' hover is cut by the rounded border, not painted over it
+}
+
+.vk-search-hint {
+  margin: 0;
+  padding: 10px $vk-gap;
+  color: $vk-text-secondary;
+  text-align: center;
+}
+
+.vk-search-hint-more {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.vk-search-empty {
+  .vk-empty {
+    padding: 20px $vk-gap;
+  }
+}
+
+.vk-search-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vk-search-row-item + .vk-search-row-item .vk-search-row {
+  border-top: 1px solid $vk-divider;
+}
+
+.vk-search-row {
+  display: flex;
+  align-items: center;
+  gap: $vk-gap;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px $vk-gap;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  &:hover {
+    background-color: $vk-hover-bg;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $vk-blue;
+    outline-offset: -2px;
+  }
+}
+
+.vk-search-row-info {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.vk-search-row-title {
+  overflow: hidden;
+  font-weight: bold;
+  color: $vk-link;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-search-row-sub {
+  overflow: hidden;
+  color: $vk-text-secondary;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-search-row-date {
+  flex: none;
+  align-self: flex-start;
+  color: $vk-text-secondary;
+  font-size: 11px;
+}
+
+// the strip of frequent chats of an empty query: circles with names, as in the original
+// the strip lives inside `.vk-search-scroll`, which already pads the window —
+// no spacing of its own; the class stays as the markup hook of the block
+.vk-search-strip-block {
+  padding: 0;
+}
+
+.vk-search-strip {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.vk-search-strip-item {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 68px;
+  padding: 4px 2px;
+  border: none;
+  border-radius: $vk-radius;
+  background: transparent;
+  color: $vk-text;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  .vk-peer-avatar {
+    flex: none;
+  }
+
+  &:hover {
+    background-color: $vk-hover-bg;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $vk-blue;
+  }
+}
+
+.vk-search-strip-name {
+  width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 // * Desktop layout
@@ -2838,17 +3050,19 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
 .vk-composer.is-drag-over { border-color: var(--vk-accent, #0077ff); background: rgba(0,119,255,0.05); }
 // (кнопки форматирования — `.vk-composer-format-btn` — стилизованы в блоке .vk-format-menu в конце файла)
 
-// the pinned message: a two-line plate under the header, like the pinned bar of Telegram —
-// the menu on the left, «Закреплённое сообщение N из M» with the preview, «×» on the right
+// the pinned message: a two-line white plate under the header, like the pinned bar of
+// Telegram — the menu on the left, «Закреплённое сообщение» with the preview, the
+// counter (opens the list) and «×» on the right
 .vk-custom-chat-pinned {
   display: flex;
   flex: 0 0 auto;
   align-items: stretch;
   min-width: 0;
   border-bottom: 1px solid $vk-border;
-  background: $vk-accent-soft;
+  background: $vk-block-bg;
 
-  &:hover { background: $vk-accent-soft-hover; }
+  // едва заметная подложка при наведении (полный --vk-hover-bg слишком яркий для всей строки)
+  &:hover { background: color-mix(in srgb, $vk-hover-bg 35%, $vk-block-bg); }
 }
 
 .vk-custom-chat-pinned-menu,
@@ -2898,10 +3112,27 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   font-weight: bold;
 }
 
+// «N из M» — the button that opens the pinned list (as the counter in Telegram)
 .vk-custom-chat-pinned-counter {
+  display: flex;
   flex: none;
-  color: $vk-text-secondary;
+  gap: 3px;
+  align-items: center;
+  align-self: center;
+  margin-right: 4px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: $vk-accent-soft;
+  color: $vk-link;
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+
+  svg { transform: rotate(90deg); }
+
+  &:hover { background: $vk-accent-soft-hover; }
 }
 
 .vk-custom-chat-pinned-preview {
@@ -7197,6 +7428,15 @@ html.is-vkgram.vk-modal-open {
   &.has-fallback > *:not(.vk-peer-avatar-fallback) {
     visibility: hidden !important;
   }
+}
+
+// мгновенный снимок аватара (dataURL из localStorage): поверх контента AvatarNew,
+// пока настоящий аватар грузится из кэша Web K; снимается при его загрузке
+.vk-peer-avatar-snapshot {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  object-fit: cover;
 }
 
 .vk-peer-avatar-fallback {

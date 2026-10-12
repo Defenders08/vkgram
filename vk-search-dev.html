@@ -1,0 +1,152 @@
+<!doctype html>
+<!-- Dev replica of the search window (VKSearchOverlay): the exact DOM the
+     component renders, mounted the way the app mounts it — inside
+     `.vk-header-search` on desktop (typing goes to the header field, the
+     window turns it white while open) and inside the mobile `.vk-header`
+     (the window has its own field). Only vk-base.scss is loaded; the avatars
+     are mocks (Web K's .avatar styles are absent here). Served by `pnpm start`
+     at /vk-search-dev.html -->
+<html class="is-vkgram">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VKgram — поиск (dev)</title>
+  <script type="module" src="/vk-search-dev.ts"></script>
+  <style>
+    html, body { margin: 0; min-height: 100%; }
+    .vkgram { min-height: 100vh; }
+    .vk-search-dev-note {
+      padding: 6px 10px 0;
+      color: var(--vk-text-secondary);
+      font-size: 11px;
+    }
+    /* mock avatar: Web K's .avatar styles are absent on a dev page; two classes,
+       чтобы перебить фон обёртки .vk-peer-avatar из vk-base.scss */
+    .vkgram .avatar-mock {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #7d9cc0, #597da3) !important;
+      color: #fff;
+      font-weight: bold;
+      flex: none;
+    }
+  </style>
+</head>
+<body>
+<div class="vkgram">
+
+  <!-- 1) десктоп: текст вводится в поле шапки, окно без своего поля -->
+  <p class="vk-search-dev-note">десктоп — ввод в поле шапки, окно прижато к нему</p>
+  <header class="vk-header">
+    <div class="vk-header-inner">
+      <button type="button" class="vk-header-logo">VKGRAM</button>
+      <div class="vk-header-spacer"></div>
+      <div class="vk-header-search">
+        <svg class="vk-header-search-icon vk-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" class="vk-header-search-input" placeholder="Поиск" aria-label="Поиск" aria-controls="popup-desktop" autocomplete="off">
+        <div id="popup-desktop" class="vk-search-popup" role="dialog" aria-label="Поиск" tabindex="-1" style="display: none">
+          <div class="vk-search-tabs-block">
+            <div class="vk-tabs">
+              <div class="vk-tabs-list" role="tablist" aria-label="Разделы поиска">
+                <button type="button" class="vk-tab is-active" role="tab" aria-selected="true">Чаты</button>
+                <button type="button" class="vk-tab" role="tab" aria-selected="false">Каналы</button>
+                <button type="button" class="vk-tab" role="tab" aria-selected="false">Приложения</button>
+                <button type="button" class="vk-tab" role="tab" aria-selected="false">Посты</button>
+                <button type="button" class="vk-tab" role="tab" aria-selected="false">Медиа</button>
+              </div>
+            </div>
+          </div>
+          <div class="vk-search-scroll">
+            <!-- пустой запрос: полоса частых чатов -->
+            <div class="vk-search-strip-block">
+              <ul class="vk-search-strip" aria-label="Частые чаты">
+                <li><button type="button" class="vk-search-strip-item" title="Иван Иванов"><span class="avatar-mock vk-peer-avatar" style="width: 48px; height: 48px; font-size: 16px;">ИИ</span><span class="vk-search-strip-name">Иван Иванов</span></button></li>
+                <li><button type="button" class="vk-search-strip-item" title="Бади"><span class="avatar-mock vk-peer-avatar" style="width: 48px; height: 48px; font-size: 16px;">Б</span><span class="vk-search-strip-name">Бади</span></button></li>
+                <li><button type="button" class="vk-search-strip-item" title="Daniel"><span class="avatar-mock vk-peer-avatar" style="width: 48px; height: 48px; font-size: 16px;">D</span><span class="vk-search-strip-name">Daniel</span></button></li>
+              </ul>
+            </div>
+            <!-- с запросом: карточка результатов -->
+            <div class="vk-search-results-block" style="display: none">
+              <ul class="vk-search-rows">
+                <li class="vk-search-row-item">
+                  <button type="button" class="vk-search-row">
+                    <span class="avatar-mock vk-peer-avatar" style="width: 40px; height: 40px; font-size: 14px;">ИИ</span>
+                    <span class="vk-search-row-info">
+                      <span class="vk-search-row-title">Иван Иванов</span>
+                      <span class="vk-search-row-sub">привет! как дела?</span>
+                    </span>
+                  </button>
+                </li>
+                <li class="vk-search-row-item">
+                  <button type="button" class="vk-search-row">
+                    <span class="avatar-mock vk-peer-avatar" style="width: 40px; height: 40px; font-size: 14px;">П</span>
+                    <span class="vk-search-row-info">
+                      <span class="vk-search-row-title">Пост канала с очень длинным названием, которое обрежется</span>
+                      <span class="vk-search-row-sub">текст найденного поста, тоже довольно длинный, чтобы было видно многоточие в конце строки</span>
+                    </span>
+                    <time class="vk-search-row-date">12:40</time>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+  <div class="vk-desktop-main">
+    <div class="vk-content" style="padding: 10px; color: var(--vk-text-secondary); min-height: 300px;">контент страницы</div>
+  </div>
+
+  <!-- 2) телефон: своего поля в шапке нет, окно с полем на всю ширину под баром -->
+  <p class="vk-search-dev-note">телефон — поле внутри окна, на всю ширину под шапкой</p>
+  <header class="vk-header is-mobile">
+    <div class="vk-header-inner">
+      <button type="button" class="vk-header-menu-button">☰</button>
+      <button type="button" class="vk-header-logo">VKGRAM</button>
+      <div class="vk-header-spacer"></div>
+      <button
+        type="button"
+        class="vk-header-action vk-header-action-icon"
+        title="Поиск"
+        aria-label="Поиск"
+        aria-haspopup="dialog"
+        data-search-toggle="mobile"
+      >
+        <svg class="vk-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
+    </div>
+    <div id="popup-mobile" class="vk-search-popup" role="dialog" aria-label="Поиск" tabindex="-1" style="display: none">
+      <div class="vk-search-head">
+        <div class="vk-search-field">
+          <svg class="vk-search-field-icon vk-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" class="vk-search-input" placeholder="Поиск" aria-label="Поиск" autocomplete="off">
+        </div>
+      </div>
+      <div class="vk-search-tabs-block">
+        <div class="vk-tabs">
+          <div class="vk-tabs-list" role="tablist" aria-label="Разделы поиска">
+            <button type="button" class="vk-tab is-active" role="tab" aria-selected="true">Чаты</button>
+            <button type="button" class="vk-tab" role="tab" aria-selected="false">Каналы</button>
+            <button type="button" class="vk-tab" role="tab" aria-selected="false">Приложения</button>
+            <button type="button" class="vk-tab" role="tab" aria-selected="false">Посты</button>
+            <button type="button" class="vk-tab" role="tab" aria-selected="false">Медиа</button>
+          </div>
+        </div>
+      </div>
+      <div class="vk-search-scroll">
+        <div class="vk-search-strip-block">
+          <ul class="vk-search-strip" aria-label="Частые чаты">
+            <li><button type="button" class="vk-search-strip-item" title="Иван Иванов"><span class="avatar-mock vk-peer-avatar" style="width: 48px; height: 48px; font-size: 16px;">ИИ</span><span class="vk-search-strip-name">Иван Иванов</span></button></li>
+            <li><button type="button" class="vk-search-strip-item" title="Марин"><span class="avatar-mock vk-peer-avatar" style="width: 48px; height: 48px; font-size: 16px;">М</span><span class="vk-search-strip-name">Марин</span></button></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </header>
+
+</div>
+</body>
+</html>

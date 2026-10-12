@@ -760,7 +760,8 @@ function MessageDialogRow(props: {
   const previewText = createMemo(() => {
     const message = lastMessage();
     if(!message || message._ === 'messageService') return '';
-    return (message.message || '').replace(/\s+/g, ' ').trim();
+    // сообщение без текста (фото, стикер…) — имя вложения вместо пустого превью
+    return (message.message || mediaLabel(message)).replace(/\s+/g, ' ').trim();
   });
   const previewTime = createMemo(() => {
     const message = lastMessage();
@@ -1580,12 +1581,21 @@ function VKMessagesChat(props: {
           <button type="button" class="vk-custom-chat-pinned-main" onClick={onPinnedClick}>
             <span class="vk-custom-chat-pinned-head">
               <span class="vk-custom-chat-pinned-label">Закреплённое сообщение</span>
-              <Show when={pinned.count() > 1}>
-                <span class="vk-custom-chat-pinned-counter">{pinned.index() + 1} из {pinned.count()}</span>
-              </Show>
             </span>
             <span class="vk-custom-chat-pinned-preview">{pinnedPreview()}</span>
           </button>
+          {/* счётчик — кнопка «списком», как в оригинальном Telegram */}
+          <Show when={pinned.count() > 1}>
+            <button
+              type="button"
+              class="vk-custom-chat-pinned-counter"
+              aria-label="Посмотреть закреплённые списком"
+              onClick={() => setPinnedListOpen(true)}
+            >
+              {pinned.index() + 1} из {pinned.count()}
+              <VKIcon name="chevron" size={12} />
+            </button>
+          </Show>
           <button
             type="button"
             class="vk-custom-chat-pinned-unpin"
