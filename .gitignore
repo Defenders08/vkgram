@@ -38,3 +38,7 @@ ignore
 /src.zip
 /scripts-dev/
 src/vkgram/.zcode/
+
+# VKgram: рантайм-данные телеметрии (создаются telemetry-server.js на сервере)
+/telemetry-data.json
+.zcode/

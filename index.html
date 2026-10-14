@@ -9,6 +9,9 @@
     <meta name="mobile-web-app-title" content="{{title}}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="{{title}}">
+    <!-- iOS standalone: прозрачный статус-бар поверх страницы — синяя шапка (и её подложка)
+         дотягиваются до самого верха экрана; без этого мета iOS рисует белую полосу -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="application-name" content="{{title}}">
     <meta name="msapplication-TileColor" content="#597da3">
     <meta name="msapplication-TileImage" content="assets/img/vkgram-mstile-144.png">
@@ -63,7 +66,8 @@
         top: 0;
         right: 0;
         left: 0;
-        height: 42px;
+        /* в standalone iOS страница уходит под статус-бар — синяя полоса должна его накрывать */
+        height: calc(42px + env(safe-area-inset-top, 0px));
         background: #597da3;
         border-bottom: 1px solid #4a6e94;
       }

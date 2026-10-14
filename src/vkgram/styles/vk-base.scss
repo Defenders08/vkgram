@@ -81,6 +81,10 @@ html.is-vkgram {
   --vk-mobile-nav-height: #{$vk-mobile-nav-height};
   --vk-gap: #{$vk-gap};
   --vk-page-width: #{$vk-page-width};
+  // * вылет «челки»/статус-бара: в standalone-режиме iOS страница уходит под статус-бар
+  // * (мета black-translucent), в обычном браузере env() = 0. Переменная — чтобы можно
+  // * было проверить раскладку подменой значения.
+  --vk-safe-top: env(safe-area-inset-top, 0px);
 
   &.night {
     --vk-blue: #4a76a8;
@@ -103,6 +107,23 @@ html.is-vkgram {
     --vk-out-bg: #2c3b4e;
     --vk-out-border: #36495f;
     --vk-shadow: 0 4px 24px rgba(0, 0, 0, .5), 0 1px 3px rgba(0, 0, 0, .4);
+  }
+
+  // * Подложка под прозрачный статус-бар в standalone iOS (black-translucent): мобильная
+  // * шапка и любой другой верх страницы остаются под часами только тогда, когда под
+  // * ними синий цвет — эта подложка держит его, что бы ни приехало под статус-бар.
+  // * В обычном браузере --vk-safe-top = 0, подложки нет.
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--vk-safe-top);
+    background: var(--vk-header-bg);
+    // слой липкой шапки (20): просмотрщики (4) и контент — под ним, как и задумано
+    z-index: 20;
+    pointer-events: none;
   }
 }
 
@@ -199,7 +220,10 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
 .vk-header {
   flex: 0 0 auto;
   box-sizing: border-box; // the bottom border is inside the height: the sticky bar adds no pixel to the document
-  height: $vk-header-height;
+  // * standalone iOS: страница уходит под статус-бар (black-translucent), шапка вырастает
+  // * на вылет safe-area, а содержимое (inner) остаётся ниже часов; в браузере env() = 0
+  height: calc(#{$vk-header-height} + var(--vk-safe-top, 0px));
+  padding-top: var(--vk-safe-top, 0px);
   background-color: $vk-header-bg;
   border-bottom: 1px solid $vk-blue-dark;
   color: $vk-header-text;
@@ -444,7 +468,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   }
 
   &.is-mobile {
-    height: $vk-mobile-header-height;
+    height: calc(#{$vk-mobile-header-height} + var(--vk-safe-top, 0px));
 
     .vk-header-action {
       margin-left: $vk-gap-small;
@@ -911,7 +935,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   left: 0;
   right: 0;
   width: auto;
-  max-height: calc(100dvh - var(--vk-mobile-header-height) - var(--vk-mobile-nav-height) - 8px);
+  max-height: calc(100dvh - var(--vk-mobile-header-height) - var(--vk-mobile-nav-height) - var(--vk-safe-top, 0px) - 8px);
   transform-origin: top center;
 }
 
@@ -1165,8 +1189,8 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   // stays in view while the page scrolls, under the sticky header; its own
   // overflow only matters when the menu itself is taller than the window
   position: sticky;
-  top: $vk-header-height;
-  max-height: calc(100vh - #{$vk-header-height});
+  top: calc(#{$vk-header-height} + var(--vk-safe-top, 0px));
+  max-height: calc(100vh - #{$vk-header-height} - var(--vk-safe-top, 0px));
   overflow-y: auto;
 
   &-list {
@@ -1260,7 +1284,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   min-width: 0;
   // fills the viewport for short pages; nothing is hidden here any more —
   // the document is the scroller and the scrollbar stands at the window edge
-  min-height: calc(100vh - #{$vk-header-height + $vk-gap});
+  min-height: calc(100vh - #{$vk-header-height + $vk-gap} - var(--vk-safe-top, 0px));
   background-color: $vk-block-bg;
 
   // Stable holder of the chat wallpaper layer + the Web K shell; moved as one
@@ -1315,7 +1339,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
 // `.vk-page` pane does — in both cases the line hugs the header's bottom edge.
 .vk-edge-line {
   position: fixed;
-  top: $vk-header-height;
+  top: calc(#{$vk-header-height} + var(--vk-safe-top, 0px));
   z-index: 5;
   height: 1px;
   background-color: $vk-border;
@@ -1341,7 +1365,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   // * «Сообщения» и «Телеграм» на десктопе — аппаратные панели фиксированной высоты:
   // * список диалогов и история чата скроллятся внутри, окно под ними не скроллится.
   .vk-content.is-app {
-    height: calc(100vh - #{$vk-header-height + $vk-gap});
+    height: calc(100vh - #{$vk-header-height + $vk-gap} - var(--vk-safe-top, 0px));
     min-height: 0;
     overflow: hidden;
 
@@ -1360,7 +1384,7 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
 // * into a fixed-height pane with its own inner scroll.
 .vk-page {
   position: relative;
-  min-height: calc(100vh - #{$vk-header-height + $vk-gap});
+  min-height: calc(100vh - #{$vk-header-height + $vk-gap} - var(--vk-safe-top, 0px));
   padding: $vk-gap;
   background-color: $vk-page-bg;
 
@@ -2897,6 +2921,212 @@ html:not(.is-vkgram):not(.vkgram-off) body > #auth-pages {
   30% {
     opacity: 1;
   }
+}
+
+// * Темы группы-форума («Сообщения» → форум без открытой темы)
+// Шапка — переиспользованная `.vk-custom-chat-header`; своё — поиск, строки
+// тем и окно создания. Иконка темы — веб-ковская `.topic-icon` (цветной
+// кружок с буквами или эмодзи), вписана в ряд по размеру аватара.
+
+.vk-topics-search {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-bottom: 1px solid $vk-divider;
+
+  .vk-search {
+    width: 100%;
+  }
+}
+
+.vk-topics-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  background: $vk-block-bg;
+}
+
+.vk-topics-empty {
+  padding: 30px 20px;
+  color: $vk-text-secondary;
+  text-align: center;
+}
+
+.vk-topics-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid $vk-divider;
+  border-radius: 0;
+  background: transparent;
+  color: $vk-text;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: $vk-hover-bg;
+  }
+
+  &.is-active {
+    background: $vk-accent-soft;
+    box-shadow: inset 3px 0 0 $vk-blue;
+  }
+}
+
+// иконка темы: веб-ковский `.topic-icon` (26px) на месте аватара диалога
+.vk-topics-row-icon {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .topic-icon {
+    // кружок темы крупнее дефолтного, чтобы жил в ряду 46px как аватар
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+}
+
+.vk-topics-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.vk-topics-row-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.vk-topics-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-topics-row-flag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: $vk-text-secondary;
+}
+
+.vk-topics-row-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: $vk-text-secondary;
+  font-size: 12px;
+  line-height: 18px;
+
+  &.is-typing {
+    color: $vk-link;
+  }
+}
+
+// правая колонка ряда: время на строке названия, счётчики на строке превью
+.vk-topics-row-meta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  margin-left: 10px;
+}
+
+.vk-topics-row-time {
+  color: $vk-text-secondary;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.vk-topics-row-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+}
+
+.vk-topics-row-unread {
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: $vk-blue;
+  color: #fff;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+
+  &.is-muted {
+    background: #b0b6bd;
+  }
+
+  &.is-pending {
+    visibility: hidden;
+  }
+}
+
+.vk-topics-row-pin {
+  display: inline-flex;
+  color: $vk-text-secondary;
+}
+
+// название темы в шапке чата: текст + замок закрытой темы
+.vk-topic-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vk-topic-title-flag {
+  flex: 0 0 auto;
+  display: inline-flex;
+  margin-left: 5px;
+  color: $vk-text-secondary;
+}
+
+// выбор цвета иконки в окне «Новая тема»
+.vk-topic-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.vk-topic-color {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+
+  &.is-active {
+    border-color: $vk-text;
+    box-shadow: 0 0 0 2px $vk-block-bg inset;
+  }
+}
+
+.vk-create-topic .vk-field-row {
+  align-items: center;
 }
 
 // the time and the ticks of a message
@@ -9562,7 +9792,7 @@ html.is-vkgram.night .vk-voice {
 
 @mixin vk-pinned($align: start) {
   position: sticky;
-  top: $vk-header-height;
+  top: calc(#{$vk-header-height} + var(--vk-safe-top, 0px));
   align-self: $align;
 }
 
@@ -13796,10 +14026,11 @@ $vk-motion: .16s;
     }
   }
 
-  // Telegram's big round logo / sticker is not part of a VK block: gone from
-  // every card that has a field (phone, code, password). The QR card has no
-  // field, so its code stays.
-  .auth-card:has(.input-field) :is(.auth-image, [class*='auth-image' i], [class*='sticker' i], .media-sticker-wrapper, canvas.rlottie) {
+  // Большой круглый логотип/стикер Telegram — не часть VK-блока: прячется на
+  // каждой карточке, где есть поле (телефон, код, пароль). У QR-карточки поля
+  // нет, её код остаётся. У карточки цифрового кода тоже нет `.input-field` —
+  // её боксы это виджет флоу `CodeInputFieldCompat`, ловим по классу обёртки.
+  .auth-card:has(.input-field, [class*='codeInput' i]) :is(.auth-image, [class*='auth-image' i], [class*='sticker' i], .media-sticker-wrapper, canvas.rlottie) {
     display: none !important;
   }
 
@@ -13982,6 +14213,96 @@ $vk-motion: .16s;
     &:has(> :is([class*='tgico' i], .toggle-visibility, .input-select-arrow)) .input-field-input {
       padding-right: var(--vk-login-field-h) !important;
     }
+  }
+
+  // ---------------------------------------------------------- карточка кода
+  // * Карточка, на которую приходит код (`AuthCodeCard`). Цифровой код вводится
+  // * в OTP-боксы флоу (`CodeInputFieldCompat` — CSS-модульные классы, внутри
+  // * нет `.input-field`, поэтому правила полей выше их не задевают); секретное
+  // * слово/фраза — в обычное поле, скинится выше. Номер телефона с карандашом —
+  // * заголовочная строка карточки; тихие строки под боксами («Отправить код
+  // * по SMS», записка о сбросе почты) — обычные ссылки.
+
+  // * строку с номером флоу центрирует (`justify-content: center` в своём
+  // * модуле) — здесь всё стоит на левом крае, а карандаш — маленький тихий
+  // * элемент в цвет ссылки, как встроенное «изменить» во VK, а не выцветший
+  // * глиф на 24px
+  .auth-card [class*='phoneWrapper' i] {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .auth-card [class*='phoneEdit' i] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-inline-start: 0 !important;
+    border-radius: $vk-radius;
+    font-size: 15px;
+    line-height: 1;
+    color: $vk-link;
+    opacity: 1;
+    transition: color $vk-motion-fast linear;
+
+    &:hover {
+      color: $vk-blue-dark;
+      opacity: 1;
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(var(--vk-blue-rgb), .4);
+      outline-offset: 1px;
+    }
+  }
+
+  // * боксы цифр: компактный ряд, прижатый к левому краю, те же рамки 1px и
+  // * уголки 2px, что у остальных полей страницы (`_wrap_` с подчёркиваниями —
+  // * класс модуля самого ряда OTP; `_phoneWrapper_` совпасть не должен, а `>`
+  // * держит вне правила содержимое бокса и каретку)
+  .auth-card [class*='_wrap_'] {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .auth-card [class*='_wrap_'] > [class*='digit'] {
+    flex: 1 1 36px;
+    max-width: 44px;
+    height: 30px;
+    border: 1px solid $vk-border;
+    border-radius: $vk-radius;
+    background-color: $vk-block-bg;
+    font-size: 14px;
+    transition: border-color $vk-motion-fast linear;
+
+    &[class*='_active'] {
+      border-color: $vk-blue;
+      transition: none;
+    }
+  }
+
+  // * тихие строки под боксами: ссылка на повторную отправку и записка о сбросе
+  // * почты входа — обычные строки 12px у левого края, ссылка внутри в цвет
+  // * ссылки; вторая строка прижимается к первой
+  .auth-card [class*='cardLink' i] {
+    margin: $vk-gap 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: left;
+    color: $vk-text-secondary;
+
+    a {
+      color: $vk-link;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+
+  .auth-card [class*='cardLink' i] + [class*='cardLink' i] {
+    margin-top: 4px;
   }
 
   // «Keep me signed in» and the like: a 13px square with a 2px corner
@@ -14321,10 +14642,13 @@ $vk-motion: .16s;
     border-top: 1px solid $vk-divider;
   }
 
-  // the flow's inline errors (a wrong code, a wrong password)
+  // встроенные ошибки флоу (неверный код, неверный пароль): небольшая строка,
+  // прижатая к полю, о котором говорит; соседние элементы приносят отступ сами
   .auth-card :is(.error-text, .input-error, [class*='error' i]:not(.input-field)) {
-    margin: 0 0 $vk-gap;
+    margin: 4px 0 0;
     font-size: 12px;
+    line-height: 1.4;
+    text-align: left;
     color: $vk-danger;
   }
 
@@ -14556,6 +14880,33 @@ $vk-motion: .16s;
     color: $vk-text-secondary;
   }
 
+  // * The compact «Статистика» strip under the lead paragraph: a blue heading
+  // * and one quiet grey line — labels and numbers in the same weight.
+  .vk-login-info-stats {
+    flex: 0 0 auto;
+    padding: $vk-gap * 1.5 $vk-gap * 2;
+    border-bottom: 1px solid $vk-divider;
+  }
+
+  .vk-login-info-stats-head {
+    margin: 0 0 $vk-gap-small;
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: bold;
+    color: $vk-link;
+  }
+
+  .vk-login-info-stats-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 $vk-gap * 1.5;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: $vk-text-secondary;
+    font-variant-numeric: tabular-nums;
+  }
+
 
   // ------------------------------------------------------- page chrome
   // * What the page itself adds around the flow (the flow's own DOM is not
@@ -14717,7 +15068,8 @@ $vk-motion: .16s;
     }
 
     .vk-login-info-head,
-    .vk-login-info-features {
+    .vk-login-info-features,
+    .vk-login-info-stats {
       padding-left: $vk-gap * 1.5;
       padding-right: $vk-gap * 1.5;
     }
@@ -14744,7 +15096,8 @@ $vk-motion: .16s;
     }
 
     .vk-login-info-head,
-    .vk-login-info-features {
+    .vk-login-info-features,
+    .vk-login-info-stats {
       padding-left: $vk-gap;
       padding-right: $vk-gap;
     }
@@ -15048,6 +15401,7 @@ $vk-motion: .16s;
   // rules above (transparent, link colour) would otherwise win on the QR part
   .vk-login-box .auth-card .btn-primary[data-vk-cta] {
     height: 30px;
+    width: 100%;
     margin: 0 !important;
     border: 1px solid $vk-blue-dark !important;
     border-right: 0 !important;
@@ -15065,6 +15419,12 @@ $vk-motion: .16s;
     display: flex !important;
     align-items: center;
     justify-content: center;
+    // web-K даёт 100% ширины только главной CTA; тихая QR-кнопка сжимается по
+    // содержимому (с font-size: 0 — почти в ноль), и белый лейбл ::before вылезает
+    // за её край: в колонке сплита и в потоке половина должна быть полной ширины.
+    // !important — ниже по файлу «fit-content» для .btn-primary-transparent
+    // специфичнее и без него побеждает
+    width: 100% !important;
     height: 30px;
     margin: 0 !important;
     padding: 0 !important;
@@ -15222,6 +15582,32 @@ $vk-motion: .16s;
     filter: contrast(1.5);
   }
 
+  // * Пока код не нарисован (`data-vk-qr='pending'`, ставится на блоке из
+  // * `LoginBox`): плита, которую флоу кладёт на место кода, становится той же
+  // * белой рамкой, какую примет готовый код, с небольшим тихим спиннером —
+  // * вместо круглой серой «телеграмной». Заголовок над ней уже скинится
+  // * (теги ставятся в `tagQrCard` до появления кода).
+  .vk-login-box[data-vk-qr='pending'] [class*='qrContainer' i] {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100% !important;
+    max-width: 232px;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 14px !important;
+    padding: 8px !important;
+    border: 1px solid $vk-border;
+    border-radius: $vk-radius;
+    background-color: #fff !important;
+  }
+
+  .vk-login-box[data-vk-qr='pending'] :is(.preloader, [class*='preloader' i]) {
+    width: 28px;
+    height: 28px;
+    color: $vk-blue;
+  }
+
   // the steps: 13px, a roomy rhythm between them, a slightly larger counter
   .vk-login-box [data-vk-qr-card] [data-vk-step] {
     gap: 10px;
@@ -15287,6 +15673,20 @@ $vk-motion: .16s;
       padding: 0 !important;
       text-align: center !important;
     }
+  }
+
+  // * «Продолжить на русском» (кнопка смены языка, стоит и на QR-шаге, и на шаге
+  // * номера): тихая строка-ссылка по центру с отступом от кнопки над ней. Классы
+  // * у неё те же, что у «Вход по номеру телефона» (`btn-primary-transparent
+  // * primary`), поэтому исключается по тегу из `tagActions`. `display: flex`
+  // * обязателен: базовое правило синей кнопки делает её inline-flex, у которой
+  // * auto-поля не работают.
+  .vk-login-box .auth-card .btn-primary.btn-primary-transparent.primary:not([data-vk-phone-link]) {
+    display: flex;
+    justify-content: center;
+    width: fit-content;
+    max-width: 100%;
+    margin: 6px auto 0;
   }
 
   // no underlines on the login page: links and buttons (and whatever sits inside
@@ -17451,3 +17851,4 @@ html.is-vkgram {
 html.is-vkgram:not(.vkgram-telegram-active) .chat-tips-toggle {
   display: none !important;
 }
+

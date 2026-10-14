@@ -41,3 +41,28 @@ export async function requestCache(event: FetchEvent) {
     return fetch(event.request);
   }
 }
+
+// * Офлайн-старт PWA: навигационный документ (index.html) — network-first, при сетевой
+// * ошибке отдаём последнюю закэшированную копию. Ключ — pathname без query: все точки
+// * входа приложения ('/', '/?vkgram=...', ярлыки манифеста) — один и тот же HTML.
+export async function requestNavigationCache(event: FetchEvent) {
+  const cacheKey = new URL(event.request.url).pathname;
+
+  try {
+    const response = await fetch(event.request);
+    if(isCorrectResponse(response)) {
+      const cache = await ctx.caches.open(CACHE_ASSETS_NAME);
+      cache.put(cacheKey, response.clone());
+    }
+
+    return response;
+  } catch(err) {
+    const cache = await timeoutRace(ctx.caches.open(CACHE_ASSETS_NAME));
+    const cached = await timeoutRace(cache.match(cacheKey, {ignoreVary: true}));
+    if(cached && isCorrectResponse(cached)) {
+      return cached;
+    }
+
+    throw err;
+  }
+}

@@ -7,6 +7,7 @@ import rootScope from '@lib/rootScope';
 import {disposeActiveAuthFlow} from '@/pages/mountAuthFlow';
 import {removeVKgramSplash} from '@/vkgram/boot';
 import {isVKgramEnabled, mountVKResponsiveLayout} from '@/vkgram/layouts/VKResponsiveLayout';
+import {sendTelemetryPing} from '@/vkgram/telemetry';
 
 let bootstrapped = false;
 
@@ -25,6 +26,9 @@ export async function bootstrapIm(): Promise<void> {
   bootstrapped = true;
 
   await rootScope.managers.appStateManager.pushToState('authState', {_: 'authStateSignedIn'});
+
+  // VKgram: анонимный пинг телеметрии — один beacon за сессию, fire-and-forget
+  sendTelemetryPing();
 
   const pageChatsEl = document.getElementById('page-chats');
   if(pageChatsEl) pageChatsEl.style.display = '';

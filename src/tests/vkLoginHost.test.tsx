@@ -1,6 +1,6 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
-import {mountVKLoginFlow, placeSplitQrHalves} from '@/vkgram/pages/VKLoginHost';
+import {mountVKLoginFlow, placeSplitQrHalves, tagQrCard} from '@/vkgram/pages/VKLoginHost';
 import {disposeActiveAuthFlow} from '@/pages/mountAuthFlow';
 import {currentCard} from '@/pages/authFlow';
 
@@ -164,5 +164,69 @@ describe('placeSplitQrHalves', () => {
     document.body.innerHTML = '<div class="auth-card"><div class="input-wrapper"></div></div>';
     const card = document.querySelector<HTMLElement>('.auth-card')!;
     expect(() => placeSplitQrHalves(card)).not.toThrow();
+  });
+});
+
+describe('tagQrCard', () => {
+  // QR-карточка так, как её рендерит флоу (SignQRCard, CSS-модульные классы):
+  // код, заголовок и подзаголовок в одном контейнере, шаги и кнопка — рядом.
+  // Русские строки: теги должны ставиться независимо от языка.
+  const mountQrCard = (withCode: boolean) => {
+    document.body.innerHTML = `
+      <div class="vk-login-box-body">
+        <div class="auth-card">
+          <div class="_container_x">
+            <div class="_sticker_x _qrContainer_x" style="--sticker-size: 240px;">
+              ${withCode ? '<canvas width="480" height="480" class="_qrCanvas_x" data-vk-qr-code=""></canvas>' : ''}
+            </div>
+            <h1 class="_title_x text-center"><span class="i18n">Быстрый вход по QR-коду</span></h1>
+            <div class="_subtitle_x secondary"><span class="i18n">Сканируйте в мобильном приложении Telegram</span></div>
+          </div>
+          <ol class="_qrDescription_x" data-vk-steps="">
+            <li data-vk-step=""><span data-vk-step-num="">1</span><div>Откройте Telegram с телефона</div></li>
+            <li data-vk-step=""><span data-vk-step-num="">2</span><div>Откройте Настройки › Устройства › Подключить устройство.</div></li>
+          </ol>
+          <button class="rp btn-primary btn-secondary btn-primary-transparent primary">Вход по номеру телефона</button>
+        </div>
+      </div>`;
+    return {
+      body: document.querySelector<HTMLElement>('.vk-login-box-body')!,
+      card: document.querySelector<HTMLElement>('.auth-card')!
+    };
+  };
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('tags the heading and the subtitle by structure, whatever the language', () => {
+    const {body, card} = mountQrCard(true);
+    tagQrCard(body);
+
+    const title = card.querySelector('h1')!;
+    const sub = card.querySelector('._subtitle_x')!;
+    expect(title.hasAttribute('data-vk-qr-title')).toBe(true);
+    expect(sub.hasAttribute('data-vk-qr-sub')).toBe(true);
+    // общий контейнер кода и заголовка — карточка с тегом скина
+    expect(card.hasAttribute('data-vk-qr-card')).toBe(true);
+    expect(card.querySelector('[data-vk-qr-code]')).not.toBeNull();
+  });
+
+  it('tags the heading before the code is drawn (the pending plate on screen)', () => {
+    const {body, card} = mountQrCard(false);
+    tagQrCard(body);
+
+    expect(card.querySelector('h1')!.hasAttribute('data-vk-qr-title')).toBe(true);
+    expect(card.querySelector('._subtitle_x')!.hasAttribute('data-vk-qr-sub')).toBe(true);
+    // без кода карточка и её порядок не размечаются — размечать нечего
+    expect(card.hasAttribute('data-vk-qr-card')).toBe(false);
+  });
+
+  it('is idempotent — the observer re-runs it on its own mutations', () => {
+    const {body} = mountQrCard(true);
+    tagQrCard(body);
+    const title = body.querySelector('h1')!;
+    tagQrCard(body);
+    expect(body.querySelector('[data-vk-qr-title]')).toBe(title);
   });
 });

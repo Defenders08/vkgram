@@ -1,5 +1,5 @@
 import {logger, LogTypes} from '@lib/logger';
-import {CACHE_ASSETS_NAME, requestCache} from '@lib/serviceWorker/cache';
+import {CACHE_ASSETS_NAME, requestCache, requestNavigationCache} from '@lib/serviceWorker/cache';
 import onStreamFetch, {toggleStreamInUse} from '@lib/serviceWorker/stream';
 import {closeAllNotifications, fillPushObject, onPing, onShownNotification, resetPushAccounts} from '@lib/serviceWorker/push';
 import CacheStorageController from '@lib/files/cacheStorage';
@@ -267,6 +267,19 @@ watchCacheStoragesLifetime({
 watchMtprotoOnDev({connectedWindows, onWindowConnected});
 
 const onFetch = (event: FetchEvent): void => {
+  // * Офлайн-старт PWA: навигационный документ — network-first с кэш-фолбэком. Safari
+  // * не исключён (в отличие от ветки ассетов ниже): iOS-PWA — главный клиент, а
+  // * Safari-проблемы были в стриминге и MTProto, не в HTML. GET отсекает POST
+  // * share_target'а, который тоже приходит с mode === 'navigate'.
+  if(
+    import.meta.env.PROD &&
+    event.request.method === 'GET' &&
+    event.request.mode === 'navigate' &&
+    event.request.url.indexOf(location.origin + '/') === 0
+  ) {
+    return event.respondWith(requestNavigationCache(event));
+  }
+
   // Web manifests must reach the network so installed PWA metadata can update.
   if(
     import.meta.env.PROD &&

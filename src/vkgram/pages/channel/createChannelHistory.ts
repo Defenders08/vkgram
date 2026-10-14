@@ -24,12 +24,14 @@ export type ChannelHistoryStatus = 'loading' | 'loaded' | 'error';
 export default function createChannelHistory(options: {
   peerId: Accessor<PeerId>,
   inputFilter?: MyInputMessagesFilter,
-  // the comments of a post: the thread of its discussion message (`peerId` is then the discussion group)
-  threadId?: number,
+  // the comments of a post: the thread of its discussion message (`peerId` is then the discussion
+  // group). An accessor (a topic chat switches topics in place) or a plain number.
+  threadId?: Accessor<number> | number,
   pageSize?: number
 }) {
   const pageSize = options.pageSize ?? 20;
   const listenerSetter = createListenerSetter();
+  const threadId = () => typeof options.threadId === 'function' ? options.threadId() : options.threadId;
 
   const [messages, setMessages] = createSignal<(Message.message | Message.messageService)[]>([], {equals: false});
   const [status, setStatus] = createSignal<ChannelHistoryStatus>('loading');
@@ -67,7 +69,7 @@ export default function createChannelHistory(options: {
         peerId,
         limit: pageSize,
         offsetId: last?.mid || 0,
-        ...(options.threadId ? {threadId: options.threadId} : {}),
+        ...(threadId() ? {threadId: threadId()} : {}),
         ...(options.inputFilter ? {
           inputFilter: {_: options.inputFilter},
           offsetPeerId: last?.peerId || NULL_PEER_ID,
@@ -101,7 +103,8 @@ export default function createChannelHistory(options: {
     }
   };
 
-  createEffect(on(options.peerId, () => {
+  // a peer or a thread change restarts the list
+  createEffect(on(() => [options.peerId(), threadId()] as const, () => {
     void load(true);
   }));
   onCleanup(() => {
@@ -113,7 +116,7 @@ export default function createChannelHistory(options: {
   // a comment belongs to the thread when it replies to the post or to another comment of it
   const isInThread = (message: Message.message) => {
     const replyTo = message.reply_to as {reply_to_msg_id?: number, reply_to_top_id?: number} | undefined;
-    return replyTo?.reply_to_top_id === options.threadId || replyTo?.reply_to_msg_id === options.threadId;
+    return replyTo?.reply_to_top_id === threadId() || replyTo?.reply_to_msg_id === threadId();
   };
   listenerSetter.add(rootScope)('history_append', ({message}) => {
     // a filtered list (shared media) is decided by the server; only the feed takes live posts

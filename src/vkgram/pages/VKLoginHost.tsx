@@ -147,32 +147,30 @@ function tagActions(root: HTMLElement, state: LoginState) {
 }
 
 /**
- * The QR card is not wrapped in `.auth-card`, so its parts are found by text and
- * structure (attributes only, nothing is moved in the DOM): the heading and the
- * subtitle (`data-vk-qr-title` / `-sub`), the common parent of the code, the
- * heading, the steps and the actions (`data-vk-qr-card`, laid out as a column by
- * the skin) and its direct children (`data-vk-qr-top`), so the skin can put the
- * heading above the code and centre the code in a clean frame.
+ * QR-карточка обёрнута в `.auth-card`, но её части находятся по структуре
+ * (только атрибуты, ничего в DOM не переносится): заголовок и подзаголовок —
+ * это собственный `h1` / строка подзаголовка карточки (поиск по тексту терял
+ * их во всех языках, кроме английского), общий родитель кода, заголовка, шагов
+ * и действий получает `data-vk-qr-card` (скин раскладывает его колонкой), а
+ * прямые дети — `data-vk-qr-top`, чтобы скин мог поставить заголовок над кодом
+ * и отцентрировать код в чистой рамке.
  */
-function leafMatching(root: HTMLElement, re: RegExp): HTMLElement | null {
-  for(const el of Array.from(root.querySelectorAll<HTMLElement>('*'))) {
-    if(el.children.length || el.closest('button, .btn-primary, [data-vk-steps]')) continue;
-    if(re.test((el.textContent || '').trim())) return el;
-  }
-  return null;
-}
-
 function commonAncestor(els: HTMLElement[]): HTMLElement | null {
   let a: HTMLElement | null = els[0];
   while(a && !els.every((e) => a!.contains(e))) a = a.parentElement;
   return a;
 }
 
-function tagQrCard(root: HTMLElement) {
+export function tagQrCard(root: HTMLElement) {
+  // заголовок и подзаголовок получают свои теги ещё до отрисовки кода (когда
+  // на экране только плита ожидания) — VK-вёрстка не должна мигать центрированной
+  // вёрсткой флоу
+  const title = root.querySelector<HTMLElement>('.auth-card [data-popup-title], .auth-card h1');
+  const sub = root.querySelector<HTMLElement>('.auth-card [class*="subtitle" i]');
+  title?.setAttribute('data-vk-qr-title', '');
+  sub?.setAttribute('data-vk-qr-sub', '');
   const code = root.querySelector<HTMLElement>('[data-vk-qr-code]');
   if(!code) return;
-  const title = leafMatching(root, /^(log in by qr code|вход по qr)/i);
-  const sub = leafMatching(root, /scan/i);
   const steps = root.querySelector<HTMLElement>('[data-vk-steps]');
   // the content block: the common parent of the code, the heading and the steps
   // (the «phone number» button may sit outside it — it is left out on purpose,

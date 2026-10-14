@@ -1,0 +1,249 @@
+<!doctype html>
+<!-- Dev replica of the topics screen of a forum group in «Сообщения»: the header
+     (back «Чаты», avatar+title, «Создать тему», menu), the search, the topic rows
+     (icon, title with flags, «Автор: превью», time, unread badge, pin) and the
+     «Новая тема» window. The exact DOM the components render, over vk-base.scss
+     only, no app. Served by `pnpm start` at /vk-topics-dev.html — look at it in a
+     ~375px wide viewport for the mobile look (the back button shows there). -->
+<html class="is-vkgram">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VKgram — темы группы (dev)</title>
+  <script type="module" src="/vk-topics-dev.ts"></script>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    .vkgram { height: 100vh !important; }
+    .vkgram .vk-modal-layer[hidden] { display: none !important; }
+    .vk-topics-dev-body { position: absolute; inset: 0; display: flex; flex-direction: column; }
+    .vk-topics-dev-page { flex: 1 1 auto; min-height: 0; display: flex; justify-content: center; padding: 0; }
+    .vk-topics-dev-right { width: min(560px, 100%); height: 100%; }
+    .vk-news-dev-buttons { display: flex; gap: 8px; padding: 10px; }
+    .vk-news-dev-buttons button { flex: 1; padding: 10px; }
+
+    /* мини-копия веб-ковской иконки темы (в приложении её даёт _topics.scss) */
+    .topic-icon {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      color: #fff;
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .topic-icon .topic-icon-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .topic-icon-content { position: relative; }
+  </style>
+</head>
+<body>
+<div class="vkgram vk-mobile-layout">
+  <div class="vk-mobile-body">
+    <div class="vk-topics-dev-body">
+
+    <header class="vk-header is-mobile">
+      <div class="vk-header-inner">
+        <button type="button" class="vk-header-menu-button" aria-label="Меню">☰</button>
+        <button type="button" class="vk-header-logo" title="Новости" aria-label="Новости">ВКГРАМ</button>
+        <div class="vk-header-spacer"></div>
+        <button type="button" class="vk-header-action" id="night-toggle" aria-label="Ночь">☾</button>
+      </div>
+    </header>
+
+    <main class="vk-topics-dev-page">
+      <section class="vk-block vk-messages-right vk-topics-dev-right" aria-label="Темы группы">
+        <div class="vk-custom-chat vk-topics-screen">
+          <header class="vk-custom-chat-header is-dialog">
+            <button type="button" class="vk-custom-chat-back" aria-label="Вернуться в чаты">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+              <span>Чаты</span>
+            </button>
+            <button type="button" class="vk-custom-chat-header-info">
+              <div class="vk-custom-chat-title">2ch.hk/ga 2.0</div>
+              <div class="vk-custom-chat-subtitle">285 участников</div>
+            </button>
+            <div class="vk-custom-chat-header-actions">
+              <button type="button" class="vk-custom-chat-avatar-button" id="show-create" aria-label="Создать тему">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
+              <button type="button" class="vk-custom-chat-avatar-button vk-custom-chat-menu-button" aria-label="Меню группы">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+              </button>
+              <span class="vk-custom-chat-avatar-button">
+                <span class="vk-avatar-mock" style="display:inline-flex;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#74a3c3,#4d7294);align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;">2c</span>
+              </span>
+            </div>
+          </header>
+
+          <div class="vk-topics-search">
+            <input type="search" class="vk-search" placeholder="Поиск по темам" aria-label="Поиск по темам">
+          </div>
+
+          <div class="vk-topics-list" role="list">
+            <button type="button" class="vk-topics-row is-active" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#6fb9f0,#3a8bd0)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">#</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title"><span class="vk-topics-row-name">Общий</span></strong>
+                <span class="vk-topics-row-preview">Цементный: арташес…</span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">11:25</time>
+                <span class="vk-topics-row-badges">
+                  <span class="vk-topics-row-pin" aria-label="Закреплено">📌</span>
+                </span>
+              </span>
+            </button>
+
+            <button type="button" class="vk-topics-row" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#ffd67e,#e0a93e)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">😀</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title">
+                  <span class="vk-topics-row-name">Мемесы</span>
+                  <span class="vk-topics-row-flag" aria-label="Без звука">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6M16 9l6 6"/></svg>
+                  </span>
+                </strong>
+                <span class="vk-topics-row-preview is-typing">А печатает<span class="vk-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">12:20</time>
+                <span class="vk-topics-row-badges">
+                  <span class="vk-topics-row-unread is-muted">5</span>
+                </span>
+              </span>
+            </button>
+
+            <button type="button" class="vk-topics-row" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#cb86db,#9c4fb0)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">🎓</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title"><span class="vk-topics-row-name">Познавательный</span></strong>
+                <span class="vk-topics-row-preview">dk: 🎁 Стикер</span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">11:46</time>
+                <span class="vk-topics-row-badges">
+                  <span class="vk-topics-row-unread">7800</span>
+                </span>
+              </span>
+            </button>
+
+            <button type="button" class="vk-topics-row" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#8eee98,#4bb85c)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">/ns/</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title">
+                  <span class="vk-topics-row-name">Закрытая тема</span>
+                  <span class="vk-topics-row-flag" aria-label="Тема закрыта">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </span>
+                </strong>
+                <span class="vk-topics-row-preview">Icewrack: GIF</span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">03:15</time>
+                <span class="vk-topics-row-badges"></span>
+              </span>
+            </button>
+
+            <button type="button" class="vk-topics-row" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#ff93b2,#e0567f)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">🎵</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title"><span class="vk-topics-row-name">Музыка</span></strong>
+                <span class="vk-topics-row-preview">Черновик: дофаминовый торчок</span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">9 окт.</time>
+                <span class="vk-topics-row-badges"></span>
+              </span>
+            </button>
+
+            <button type="button" class="vk-topics-row" role="listitem">
+              <span class="vk-topics-row-icon">
+                <span class="topic-icon" style="background:linear-gradient(#fb6f5f,#d13a2c)">
+                  <svg class="topic-icon-svg" viewBox="0 0 26 26"><use href="#topic-icon" fill="rgba(0,0,0,.18)"/></svg>
+                  <span class="topic-icon-content">🍓</span>
+                </span>
+              </span>
+              <span class="vk-topics-row-main">
+                <strong class="vk-topics-row-title"><span class="vk-topics-row-name">Нюдесы</span></strong>
+                <span class="vk-topics-row-preview">Эрик Гачимученик: жоп…</span>
+              </span>
+              <span class="vk-topics-row-meta">
+                <time class="vk-topics-row-time">19 сент.</time>
+                <span class="vk-topics-row-badges"></span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="vk-modal-layer" id="create-layer" hidden>
+      <div class="vk-modal vk-modal-mock" role="dialog" aria-label="Новая тема" style="width: min(440px, calc(100% - 24px));">
+        <header class="vk-modal-head">
+          <div class="vk-modal-title">Новая тема</div>
+          <button type="button" class="vk-modal-close" id="close-create" aria-label="Закрыть">×</button>
+        </header>
+        <div class="vk-modal-body vk-create-topic">
+          <div class="vk-field-row">
+            <label for="dev-topic-name">Название</label>
+            <input id="dev-topic-name" class="vk-input" type="text" placeholder="Название темы" autocomplete="off">
+          </div>
+          <div class="vk-field-row">
+            <span>Цвет темы</span>
+            <div class="vk-topic-colors" role="radiogroup" aria-label="Цвет темы">
+              <button type="button" class="vk-topic-color is-active" style="background:#6fb9f0" aria-label="Цвет 1"></button>
+              <button type="button" class="vk-topic-color" style="background:#ffd67e" aria-label="Цвет 2"></button>
+              <button type="button" class="vk-topic-color" style="background:#cb86db" aria-label="Цвет 3"></button>
+              <button type="button" class="vk-topic-color" style="background:#8eee98" aria-label="Цвет 4"></button>
+              <button type="button" class="vk-topic-color" style="background:#ff93b2" aria-label="Цвет 5"></button>
+              <button type="button" class="vk-topic-color" style="background:#fb6f5f" aria-label="Цвет 6"></button>
+            </div>
+          </div>
+        </div>
+        <div class="vk-modal-foot">
+          <button type="button" class="vk-button vk-button-secondary">Отмена</button>
+          <button type="button" class="vk-button">Создать тему</button>
+        </div>
+      </div>
+    </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- svg-деф веб-ковской иконки темы (в приложении — в index.html) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <path id="topic-icon" d="M21.3733 4.27035C19.2176 2.25323 16.2016 1 12.8636 1C6.31153 1 1 5.82866 1 11.7851C1 15.1823 2.58685 17.9669 5.28707 19.9438C5.63238 20.1966 5.95042 21.6013 5.18073 22.7812C4.86598 23.2637 4.51948 23.639 4.25272 23.928C3.86715 24.3457 3.6482 24.5828 3.93266 24.7022C4.22935 24.8266 5.98245 24.8882 7.24776 24.1786C8.23812 23.6232 8.83793 23.0691 9.24187 22.696C9.57588 22.3875 9.77595 22.2027 9.95217 22.2431C10.584 22.388 11.236 22.4868 11.9035 22.5354C11.9126 22.5361 11.9218 22.5368 11.9309 22.5374C12.2386 22.5592 12.5497 22.5702 12.8636 22.5702C19.4157 22.5702 24.7273 17.7416 24.7273 11.7851C24.7273 8.86318 23.4491 6.21263 21.3733 4.27035Z" />
+  </defs>
+</svg>
+</body>
+</html>

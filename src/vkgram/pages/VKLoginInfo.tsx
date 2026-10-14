@@ -1,5 +1,6 @@
-import {For} from 'solid-js';
+import {For, Show, createSignal, onMount} from 'solid-js';
 import VKIcon, {VKIconName} from '@/vkgram/components/VKIcons';
+import {fetchTelemetryStats} from '@/vkgram/telemetry';
 
 type Feature = {
   // the project's own line icons — the same set as the left menu and the settings button
@@ -41,8 +42,17 @@ const FEATURES: Feature[] = [
  * to the right of the authorization flow. Static content only — the real
  * sign-in lives in `<AuthCardsHost>` next to it. Styled in the «Login page»
  * section of `vk-base.scss` (`.vk-login-info`).
+ *
+ * Under the lead paragraph — the compact «Статистика» line: anonymous
+ * telemetry counters. Loaded with one fetch on mount; not in prod (or if the
+ * server is silent) the whole section is not shown.
  */
 export default function VKLoginInfo() {
+  const [stats, setStats] = createSignal<{total: number, active24h: number}>();
+  onMount(() => {
+    fetchTelemetryStats().then((s) => s && setStats(s));
+  });
+
   return (
     <section class="vk-login-info" aria-labelledby="vk-login-info-title">
       <div class="vk-login-info-head">
@@ -51,6 +61,18 @@ export default function VKLoginInfo() {
           VKGRAM — неофициальный клиент Telegram, созданный на основе открытого Telegram Web K. Серверная часть и протокол взаимодействия с Telegram не изменялись — VKgram работает через стандартную инфраструктуру Telegram, изменяя в основном интерфейс и клиентскую часть. Ваш аккаунт и данные остаются в Telegram.
         </p>
       </div>
+
+      <Show when={stats()}>
+        {(s) => (
+          <section class="vk-login-info-stats" aria-labelledby="vk-login-info-stats-title">
+            <h3 id="vk-login-info-stats-title" class="vk-login-info-stats-head">Статистика</h3>
+            <p class="vk-login-info-stats-line">
+              <span class="vk-login-info-stat">Активные пользователи: {s().active24h.toLocaleString('ru-RU')}</span>
+              <span class="vk-login-info-stat">Общее за всё время пользователей: {s().total.toLocaleString('ru-RU')}</span>
+            </p>
+          </section>
+        )}
+      </Show>
 
       <div class="vk-login-info-features">
         <For each={FEATURES}>{(f) => (

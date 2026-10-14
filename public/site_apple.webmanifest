@@ -33,6 +33,29 @@
             "type": "image/png"
         }
     ],
+    "shortcuts": [
+        {
+            "name": "Сообщения",
+            "url": "./?vkgram=messages",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Новости",
+            "url": "./?vkgram=news",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Друзья",
+            "url": "./?vkgram=friends",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Аудиозаписи",
+            "url": "./?vkgram=audio",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        }
+    ],
+    "launch_handler": {"client_mode": "focus-existing"},
     "share_target": {
         "action": "./share/",
         "method": "POST",

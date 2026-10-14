@@ -3398,6 +3398,7 @@
 "QRCode.CopiedLink" = "Profile link copied to clipboard";
 "InviteLink.ContextGetQRCode" = "Get QR Code";
 "InviteLink.QRCode.Title" = "Invite by QR Code";
+"InviteLink.QRCode.InfoGroup" = "Anyone on Telegram can scan this code to join your group.";
 "InviteLink.QRCode.InfoGroupCall" = "Everyone on Telegram can scan this code to join your group call.";
 "Alert.UserDoesntExists" = "Sorry, this user doesn't seem to exist.";
 "Alert.Confirm.Discard" = "Discard";

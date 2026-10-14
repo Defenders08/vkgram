@@ -12,6 +12,7 @@ import appNavigationController from '@components/appNavigationController';
  * NB: must not import sections.ts (which imports this file).
  */
 const URL_PARAM = 'peer';
+const URL_TOPIC_PARAM = 'topic';
 
 function getPeerIdFromUrl(): PeerId | undefined {
   const params = new URLSearchParams(location.search);
@@ -20,11 +21,26 @@ function getPeerIdFromUrl(): PeerId | undefined {
   return Number.isFinite(n) && n !== 0 ? n as PeerId : undefined;
 }
 
+function getTopicIdFromUrl(): number | undefined {
+  const params = new URLSearchParams(location.search);
+  if(params.get('vkgram') !== 'messages') return;
+  const n = Number(params.get(URL_TOPIC_PARAM));
+  return Number.isFinite(n) && n !== 0 ? n : undefined;
+}
+
 const [messagePeerId, setMessagePeerId] = createRoot(() =>
   createSignal<PeerId | undefined>(getPeerIdFromUrl())
 );
 
 export {messagePeerId as vkMessagePeerId};
+
+// the open topic of a forum (?vkgram=messages&peer=…&topic=…); undefined — the topics
+// list itself. Lives together with the peer: the same URL, the same write rules.
+const [messageThreadId, setMessageThreadId] = createRoot(() =>
+  createSignal<number | undefined>(getTopicIdFromUrl())
+);
+
+export {messageThreadId as vkMessageTopicId};
 
 /**
  * What the chat should do with one of its messages as soon as it is on screen — set by a flow that
@@ -52,6 +68,21 @@ export function setVKMessagePeer(peerId: PeerId | undefined) {
       url.searchParams.set(URL_PARAM, String(peerId));
     } else {
       url.searchParams.delete(URL_PARAM);
+    }
+  });
+}
+
+/**
+ * Update the open topic of the peer. A peer change drops the topic by itself
+ * (a new dialog opens on its topics list), so only this setter writes it.
+ */
+export function setVKMessageTopic(topicId: number | undefined) {
+  setMessageThreadId(topicId);
+  appNavigationController.updateUrl((url) => {
+    if(topicId && url.searchParams.get('vkgram') === 'messages' && url.searchParams.get(URL_PARAM)) {
+      url.searchParams.set(URL_TOPIC_PARAM, String(topicId));
+    } else {
+      url.searchParams.delete(URL_TOPIC_PARAM);
     }
   });
 }

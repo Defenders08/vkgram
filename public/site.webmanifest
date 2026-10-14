@@ -61,8 +61,43 @@
             "src": "assets/img/vkgram-icon-512.png",
             "sizes": "512x512",
             "type": "image/png"
+        },
+        {
+            "src": "assets/img/vkgram-icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "assets/img/vkgram-icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
         }
     ],
+    "shortcuts": [
+        {
+            "name": "Сообщения",
+            "url": "./?vkgram=messages",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Новости",
+            "url": "./?vkgram=news",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Друзья",
+            "url": "./?vkgram=friends",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        },
+        {
+            "name": "Аудиозаписи",
+            "url": "./?vkgram=audio",
+            "icons": [{"src": "assets/img/vkgram-icon-96.png", "sizes": "96x96", "type": "image/png"}]
+        }
+    ],
+    "launch_handler": {"client_mode": "focus-existing"},
     "share_target": {
         "action": "./share/",
         "method": "POST",

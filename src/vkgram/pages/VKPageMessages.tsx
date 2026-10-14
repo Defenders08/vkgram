@@ -1,5 +1,5 @@
 import {createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show} from 'solid-js';
-import type {Chat, ChatFull, Message, User} from '@layer';
+import type {Chat, ChatFull, ForumTopic, Message, User} from '@layer';
 import rootScope from '@lib/rootScope';
 import {usePeers} from '@stores/peers';
 import {useFullPeer} from '@stores/fullPeers';
@@ -25,12 +25,15 @@ import createPeerTypings from '@/vkgram/hooks/createPeerTypings';
 import createOutboxRead from '@/vkgram/hooks/createOutboxRead';
 import {fetchFolder, isBroadcastChannel, isMessagesPeer, isSubscribedChannel} from '@/vkgram/hooks/useSubscribedChannels';
 import createChannelHistory from '@/vkgram/pages/channel/createChannelHistory';
-import getDialogLastMessage from '@/vkgram/utils/getDialogLastMessage';
 import type {ButtonMenuItemOptionsVerifiable} from '@components/buttonMenu';
 import createContextMenu from '@helpers/dom/createContextMenu';
+import getDialogLastMessage from '@/vkgram/utils/getDialogLastMessage';
+import createForumTopics, {isForumPeer} from '@/vkgram/hooks/createForumTopics';
+import VKTopicsList from '@/vkgram/pages/messages/VKTopicsList';
+import createDialogContextMenu from '@/vkgram/pages/messages/createDialogContextMenu';
 import {openVKPeerPage} from '@/vkgram/pages/profile/openProfile';
 import {openVKChannelPage} from '@/vkgram/pages/channel/openChannel';
-import {vkMessagePeerId, setVKMessagePeer, vkMessageAction, setVKMessageAction} from '@/vkgram/pages/messages/route';
+import {vkMessagePeerId, setVKMessagePeer, vkMessageTopicId, setVKMessageTopic, vkMessageAction, setVKMessageAction} from '@/vkgram/pages/messages/route';
 import {vkMessagesSettings} from '@/vkgram/pages/messages/settings';
 import useMessagesCustomize from '@/vkgram/pages/messages/customize';
 import VKMessagesSettings from '@/vkgram/pages/messages/VKMessagesSettings';
@@ -135,6 +138,10 @@ export default function VKPageMessages() {
   const [selectedPeerId, setSelectedPeerId] = createSignal<PeerId>(
     vkMessagePeerId() ?? NULL_PEER_ID
   );
+  // the open topic of a forum peer (`undefined` — the topics list itself is the view)
+  const [selectedTopicId, setSelectedTopicId] = createSignal<number | undefined>(
+    vkMessageTopicId()
+  );
   // the post whose comments are open in the «миничат» (instead of the dialog); a different dialog closes it
   const [commentsPost, setCommentsPost] = createSignal<Message.message[]>();
   const [isReady, setReady] = createSignal(false);
@@ -154,8 +161,10 @@ export default function VKPageMessages() {
   let alive = true;
   let reloadTimer: number | undefined;
   let loadToken = 0;
-  // Mobile navigation stack item: browser Back → return to dialog list.
+  // Mobile navigation stack items: browser Back → return one level up (topic →
+  // topics list → dialog list).
   let mobileNavItem: NavigationItem | undefined;
+  let mobileTopicNavItem: NavigationItem | undefined;
 
   // Keep the URL in sync whenever the selected peer changes.
   createEffect(() => {
@@ -163,12 +172,25 @@ export default function VKPageMessages() {
     setVKMessagePeer(peerId !== NULL_PEER_ID ? peerId : undefined);
   });
 
+  // …and the open topic with it (written only while a peer param is there).
+  createEffect(() => {
+    setVKMessageTopic(selectedTopicId());
+  });
+
   createEffect(on(selectedPeerId, () => setCommentsPost(undefined), {defer: true}));
 
-  // a chat opened from another page while «Сообщения» is already open (`openVKChat`)
+  // a chat opened from another page while «Сообщения» is already open (`openVKChat`);
+  // the topic travels by its own signal (`openVKChat` drops it, `openVKTopic` sets it)
   createEffect(on(vkMessagePeerId, (peerId) => {
     if(!peerId || peerId === selectedPeerId()) return;
     setSelectedPeerId(peerId);
+    setMobileShowChat(true);
+  }, {defer: true}));
+
+  // a topic opened from another page while «Сообщения» is already open
+  createEffect(on(vkMessageTopicId, (topicId) => {
+    if(topicId === selectedTopicId()) return;
+    setSelectedTopicId(topicId);
     setMobileShowChat(true);
   }, {defer: true}));
 
@@ -227,18 +249,26 @@ export default function VKPageMessages() {
     loadToken++;
     window.clearTimeout(reloadTimer);
     listenerSetter.removeAll();
-    // Drop the mobile nav reference so the orphaned onPop does nothing.
+    // Drop the mobile nav references so the orphaned onPop does nothing.
     mobileNavItem = undefined;
+    mobileTopicNavItem = undefined;
   });
 
   // ── Dialog selection ────────────────────────────────────────────────────────
 
   /**
    * Select a dialog.  On mobile, also switches to the chat panel and pushes a
-   * browser history entry so the Back button returns to the list.
+   * browser history entry so the Back button returns to the list.  A forum
+   * group lands on its topics list (no topic is open).
    */
   const selectDialog = (peerId: PeerId) => {
-    // Drop the previous nav item (if switching between chats directly).
+    // Drop the previous nav items (if switching between chats directly): the
+    // topic screen first (it lives above the chat), then the chat itself.
+    if(mobileTopicNavItem) {
+      const oldTopic = mobileTopicNavItem;
+      mobileTopicNavItem = undefined;
+      appNavigationController.backByItem(oldTopic);
+    }
     if(mobileNavItem) {
       // Clear the reference first so its onPop guard fails and does not reset
       // selectedPeerId while we are about to set it to the new value.
@@ -248,6 +278,7 @@ export default function VKPageMessages() {
     }
 
     setSelectedPeerId(peerId);
+    setSelectedTopicId(undefined);
     setMobileShowChat(true);
 
     if(peerId !== NULL_PEER_ID) {
@@ -256,9 +287,12 @@ export default function VKPageMessages() {
         onPop: () => {
           if(mobileNavItem !== item) return;
           mobileNavItem = undefined;
+          // the topics screen lives above the chat: it goes with it
+          dropTopicNav();
           if(alive) {
             setSelectedPeerId(NULL_PEER_ID);
             setMobileShowChat(false);
+            setSelectedTopicId(undefined);
           }
         },
         onEscape: () => false
@@ -269,14 +303,74 @@ export default function VKPageMessages() {
   };
 
   /**
+   * Open a topic of the selected forum. On mobile it is a level above the
+   * topics list: browser Back returns there, not to the dialog list.
+   */
+  const selectTopic = (topicId: number) => {
+    // the header of the topic chat needs the topic object; the storage has it
+    // (a just-created one is being put there by its update right now)
+    void rootScope.managers.dialogsStorage.getForumTopicOrReload(selectedPeerId(), topicId);
+
+    if(mobileTopicNavItem) {
+      // switching between topics directly
+      const oldTopic = mobileTopicNavItem;
+      mobileTopicNavItem = undefined;
+      appNavigationController.backByItem(oldTopic);
+    }
+
+    setSelectedTopicId(topicId);
+
+    if(isDesktop()) return;
+    const item: NavigationItem = {
+      type: 'vkgram-section',
+      onPop: () => {
+        if(mobileTopicNavItem !== item) return;
+        mobileTopicNavItem = undefined;
+        if(alive) setSelectedTopicId(undefined);
+      },
+      onEscape: () => false
+    };
+    mobileTopicNavItem = item;
+    appNavigationController.pushItem(item);
+  };
+
+  /** Pop the topic nav item (if any) without letting its onPop touch the signals. */
+  const dropTopicNav = () => {
+    const item = mobileTopicNavItem;
+    if(!item) return;
+    mobileTopicNavItem = undefined;
+    appNavigationController.backByItem(item);
+  };
+
+  // A jump/reply/edit pointing into a forum's message opens the topic that holds
+  // it first (the chat below then does the job itself).
+  createEffect(() => {
+    const action = vkMessageAction();
+    if(!action || action.peerId !== selectedPeerId() || selectedTopicId() !== undefined) return;
+    if(!isForumPeer(peers[action.peerId])) return;
+
+    setVKMessageAction(undefined);
+    const {mid, kind} = action;
+    void rootScope.managers.appMessagesManager.getMessageByPeer(action.peerId, mid).then((message) => {
+      if(!alive || message?._ !== 'message') return;
+      const replyTo = message.reply_to as {reply_to_top_id?: number, reply_to_msg_id?: number} | undefined;
+      const topicId = replyTo?.reply_to_top_id ?? replyTo?.reply_to_msg_id ?? mid;
+      selectTopic(topicId);
+      setVKMessageAction({peerId: action.peerId, mid, kind});
+    });
+  });
+
+  /**
    * Return to the dialog list on mobile (the «←» button or the browser Back).
    */
   const closeMobileChat = () => {
     if(mobileNavItem) {
       appNavigationController.backByItem(mobileNavItem);
     } else {
+      dropTopicNav();
       setSelectedPeerId(NULL_PEER_ID);
       setMobileShowChat(false);
+      setSelectedTopicId(undefined);
     }
   };
 
@@ -482,6 +576,12 @@ export default function VKPageMessages() {
     return [...dialogs(), ...archiveDialogs()].find((dialog) => dialog.peerId === peerId);
   });
 
+  // The topics of the selected forum; for every other peer the hook stays idle.
+  const forumTopics = createForumTopics(() => {
+    const peerId = selectedPeerId();
+    return peerId !== NULL_PEER_ID && isForumPeer(peers[peerId]) ? peerId : undefined;
+  });
+
   // The list and the chat take turns: an open chat replaces the search and the list.
   const chatOpen = () => mobileShowChat() && selectedPeerId() !== NULL_PEER_ID;
 
@@ -584,19 +684,44 @@ export default function VKPageMessages() {
             when={selectedPeerId() !== NULL_PEER_ID}
             fallback={<div class="vk-messages-no-chat">Выберите диалог</div>}
           >
-            <Show
-              when={commentsPost()}
-              keyed
-              fallback={
-                <VKMessagesChat
-                  peerId={selectedPeerId()}
-                  dialog={selectedDialog()}
-                  onBack={closeMobileChat}
-                  onOpenComments={setCommentsPost}
-                />
-              }
-            >
+            {/* Комментарии поста канала. */}
+            <Show when={commentsPost()} keyed>
               {(post) => <VKCommentsChat post={post} onBack={() => setCommentsPost(undefined)} />}
+            </Show>
+            {/* Открытая тема форума. */}
+            <Show when={!commentsPost() && selectedTopicId() !== undefined}>
+              <VKMessagesChat
+                peerId={selectedPeerId()}
+                dialog={forumTopics.topicsById().get(selectedTopicId()) ?? selectedDialog()}
+                topicId={selectedTopicId()}
+                topic={() => forumTopics.topicsById().get(selectedTopicId())}
+                topicTyping={() => forumTopics.typings(selectedTopicId())}
+                onBackToTopics={() => setSelectedTopicId(undefined)}
+                onBack={closeMobileChat}
+                onOpenComments={setCommentsPost}
+              />
+            </Show>
+            {/* Форум без открытой темы: список тем вместо чата. Шапка — как у
+                обычного чата: «Чаты» слева и на десктопе тоже (клик возвращает
+                к списку диалогов). */}
+            <Show when={!commentsPost() && selectedTopicId() === undefined && isForumPeer(peers[selectedPeerId()])}>
+              <VKTopicsList
+                peerId={selectedPeerId()}
+                topics={forumTopics}
+                dialog={selectedDialog()}
+                activeTopicId={selectedTopicId()}
+                onOpenTopic={selectTopic}
+                onClose={closeMobileChat}
+              />
+            </Show>
+            {/* Обычный диалог. */}
+            <Show when={!commentsPost() && selectedTopicId() === undefined && !isForumPeer(peers[selectedPeerId()])}>
+              <VKMessagesChat
+                peerId={selectedPeerId()}
+                dialog={selectedDialog()}
+                onBack={closeMobileChat}
+                onOpenComments={setCommentsPost}
+              />
             </Show>
           </Show>
         </section>
@@ -647,56 +772,6 @@ export default function VKPageMessages() {
       </div>
     </div>
   );
-}
-
-// ── Dialog context menu ───────────────────────────────────────────────────────
-
-function createDialogContextMenu(options: {
-  element: HTMLElement,
-  // a getter: the row lives on while its dialog object is replaced by newer ones
-  dialog: () => Dialog
-}) {
-  const managers = rootScope.managers;
-  const peerId = options.dialog().peerId;
-  const dialog = new Proxy({} as Dialog, {get: (_, key) => (options.dialog() as any)[key]});
-
-  const buttons: ButtonMenuItemOptionsVerifiable[] = [{
-    icon: 'unread',
-    regularText: 'Пометить непрочитанным',
-    onClick: () => managers.appMessagesManager.markDialogUnread({peerId}),
-    verify: () => !dialog.unread_count
-  }, {
-    icon: 'readchats',
-    regularText: 'Пометить прочитанным',
-    onClick: () => managers.appMessagesManager.readHistory({peerId}),
-    verify: () => !!dialog.unread_count
-  }, {
-    icon: 'pin',
-    regularText: 'Закрепить',
-    onClick: () => managers.appMessagesManager.toggleDialogPin({peerId, filterId: FOLDER_ID_ALL}),
-    verify: () => !dialog.pFlags?.pinned
-  }, {
-    icon: 'unpin',
-    regularText: 'Открепить',
-    onClick: () => managers.appMessagesManager.toggleDialogPin({peerId, filterId: FOLDER_ID_ALL}),
-    verify: () => !!dialog.pFlags?.pinned
-  }, {
-    icon: 'unarchive',
-    regularText: 'Вернуть из архива',
-    onClick: () => managers.appMessagesManager.editPeerFolders([peerId], FOLDER_ID_ALL),
-    verify: () => !!dialog.folder_id
-  }, {
-    icon: 'archive',
-    regularText: 'В архив',
-    onClick: () => managers.appMessagesManager.editPeerFolders([peerId], FOLDER_ID_ARCHIVE),
-    verify: () => !dialog.folder_id
-  }];
-
-  return createContextMenu({
-    buttons,
-    listenTo: options.element,
-    findElement: () => options.element
-  });
 }
 
 // ── Pinned plate menu ─────────────────────────────────────────────────────────
@@ -998,15 +1073,24 @@ function VKCommentsChat(props: {post: Message.message[], onBack: () => void}) {
 
 function VKMessagesChat(props: {
   peerId: PeerId,
-  dialog?: Dialog,
+  // обычный диалог или открытая тема (её счётчики живут в объекте темы)
+  dialog?: Dialog | ForumTopic.forumTopic,
   onBack: () => void,
   // the dialog's chat opens a comments thread (a channel post's «Комментарии»)
   onOpenComments?: (post: Message.message[]) => void,
   // set: the chat is the comments thread of a post (`peerId` is the discussion group)
-  thread?: CommentsThread
+  thread?: CommentsThread,
+  // set: the chat is a topic of a forum group (`peerId` is the forum); the
+  // topic object travels along for the title, the unread counters and the ticks
+  topicId?: number,
+  topic?: () => ForumTopic.forumTopic | undefined,
+  topicTyping?: () => string | undefined,
+  // mobile: back to the topics list
+  onBackToTopics?: () => void
 }) {
   const peers = usePeers();
   const peer = () => peers[props.peerId] as User.user | Chat.chat | Chat.channel | undefined;
+  const topic = () => props.topic?.();
   // a click on the header or the avatar: a channel's dialog opens the channel's page, the rest — the profile
   const openPeerPage = () => openVKPeerPage(props.peerId, peer());
   // the full chat knows the exact number of members (the basic one may not have it)
@@ -1019,7 +1103,7 @@ function VKMessagesChat(props: {
   onCleanup(clearSelection);
   createEffect(on(() => props.peerId, clearSelection, {defer: true}));
 
-  const history = createChannelHistory({peerId: () => props.peerId, threadId: props.thread?.id, pageSize: 40});
+  const history = createChannelHistory({peerId: () => props.peerId, threadId: props.thread?.id ?? props.topicId, pageSize: 40});
   const channel = () => props.thread ? peers[props.thread.channelPeerId] as Chat.channel | undefined : undefined;
   // the discussion message itself is the post (shown on top), not a comment
   const comments = createMemo(() => history.messages().filter((message) => message.mid !== props.thread?.id));
@@ -1029,8 +1113,10 @@ function VKMessagesChat(props: {
     return total ? `${total} ${pluralRu(total, 'комментарий', 'комментария', 'комментариев')}` : 'Комментарии';
   };
 
-  // «печатает…» instead of the @username under the name
-  const typing = createPeerTypings(() => props.peerId);
+  // «печатает…» instead of the @username under the name; a topic has its own
+  // typing (the dialog's belongs to the forum as a whole)
+  const peerTyping = createPeerTypings(() => props.peerId);
+  const typing = () => props.topicId !== undefined ? props.topicTyping?.() : peerTyping();
   // chats where my messages get the ✓ / ✓✓ ticks: everywhere but a channel (no read
   // receipts there) and Saved Messages — private chats and (mega)groups, as in Telegram
   const isTicksChat = () => !props.thread && props.peerId !== rootScope.myId &&
@@ -1039,18 +1125,23 @@ function VKMessagesChat(props: {
       return !!p && (p._ === 'user' || !isBroadcastChannel(p));
     })();
   const outboxRead = createOutboxRead(() => props.peerId, isTicksChat);
+  // a topic counts its own read receipts (`read_outbox_max_id` of the topic dialog)
+  const ticksReadMaxId = () => {
+    if(!isTicksChat()) return undefined;
+    return props.topicId !== undefined ? (topic()?.read_outbox_max_id || 0) : outboxRead();
+  };
 
   let scrollEl!: HTMLDivElement;
-  // Закреплённые сообщения диалога (в ветке комментариев их нет): плита под шапкой,
-  // прыжки к закрепу и список «Все закреплённые».
-  const pinned = createVKPinnedMessages(() => props.peerId, () => !props.thread);
+  // Закреплённые сообщения диалога (в ветке комментариев и в теме их нет):
+  // плита под шапкой, прыжки к закрепу и список «Все закреплённые».
+  const pinned = createVKPinnedMessages(() => props.peerId, () => !props.thread && props.topicId === undefined);
   // после перехода по плите она стоит на выбранном закрепе, пока пользователь не вернётся
   // к концу истории (тогда снова работает слежение за скроллом)
   const [pinnedLocked, setPinnedLocked] = createSignal(false);
   const [isPinnedListOpen, setPinnedListOpen] = createSignal(false);
   // право закреплять: в личке всегда есть, в чатах — право «pin_messages»
   const [canPinPinned] = createResource(
-    () => (props.thread ? undefined : props.peerId),
+    () => (props.thread || props.topicId !== undefined ? undefined : props.peerId),
     async(peerId) => {
       if(!peerId) return false;
       try {
@@ -1116,8 +1207,8 @@ function VKMessagesChat(props: {
   const [editing, setEditing] = createSignal<Message.message>();
 
   // reply / edit belong to the dialog they were started in; a jump and the pinned
-  // plate belong to it too
-  createEffect(on(() => props.peerId, () => {
+  // plate belong to it too — a topic is a dialog of its own
+  createEffect(on(() => [props.peerId, props.topicId] as const, () => {
     setReplyTo(undefined);
     setEditing(undefined);
     setPendingJump(undefined);
@@ -1369,13 +1460,28 @@ function VKMessagesChat(props: {
   onCleanup(() => window.clearTimeout(readTimer));
 
   const markRead = () => {
-    if(props.thread || !isFocused() || history.status() !== 'loaded' || !scrollEl) return;
+    if(!isFocused() || history.status() !== 'loaded' || !scrollEl) return;
     if(!isNearBottom()) return;
 
     const dialog = props.dialog;
     const unreadCount = dialog?.unread_count || 0;
-    const markedUnread = !!dialog?.pFlags?.unread_mark;
+    const markedUnread = !!(dialog?.pFlags as any)?.unread_mark;
     if(!dialog || (!unreadCount && !markedUnread)) return;
+
+    // a topic reads on its own: its unread counter lives in the topic dialog
+    if(props.topicId !== undefined) {
+      if(!unreadCount) return;
+      const key = `${props.peerId}:${props.topicId}:${unreadCount}:${dialog.top_message}`;
+      if(key === lastReadKey) return;
+      lastReadKey = key;
+      rootScope.managers.appMessagesManager.readTopics({peerId: props.peerId, topicIds: [props.topicId]}).catch((err) => {
+        lastReadKey = '';
+        console.error('VKgram: failed to mark the topic as read', err);
+      });
+      return;
+    }
+
+    if(props.thread) return;
 
     const key = `${props.peerId}:${unreadCount}:${markedUnread}:${dialog.top_message}`;
     if(key === lastReadKey) return;
@@ -1405,12 +1511,12 @@ function VKMessagesChat(props: {
     void isFocused();
     void props.peerId;
     void props.dialog?.unread_count;
-    void props.dialog?.pFlags?.unread_mark;
+    void (props.dialog?.pFlags as any)?.unread_mark;
     scheduleMarkRead();
   });
 
-  // a different dialog is a different state
-  createEffect(on(() => props.peerId, () => {
+  // a different dialog (or a different topic) is a different read state
+  createEffect(on(() => [props.peerId, props.topicId] as const, () => {
     lastReadKey = '';
   }, {defer: true}));
 
@@ -1462,7 +1568,7 @@ function VKMessagesChat(props: {
   return (
     <div class="vk-custom-chat">
       <Show
-        when={props.thread}
+        when={props.thread || props.topicId !== undefined}
         fallback={
           <header class="vk-custom-chat-header is-dialog">
             <button type="button" class="vk-custom-chat-back" aria-label="Вернуться в чаты" onClick={props.onBack}>
@@ -1498,7 +1604,7 @@ function VKMessagesChat(props: {
                 class="vk-custom-chat-avatar-button vk-custom-chat-menu-button"
                 aria-label={`Меню диалога с ${peerTitle(peer())}`}
                 ref={(el: HTMLButtonElement) => {
-                  const menu = createDialogContextMenu({element: el, dialog: () => props.dialog || ({peerId: props.peerId} as Dialog)});
+                  const menu = createDialogContextMenu({element: el, dialog: () => (props.dialog as Dialog) || ({peerId: props.peerId} as Dialog)});
                   onCleanup(() => menu.destroy());
                 }}
                 onClick={(e) => {
@@ -1523,36 +1629,75 @@ function VKMessagesChat(props: {
           </header>
         }
       >
-        {/* миничат комментариев: назад к каналу, «N комментариев», под ним — название канала */}
-        <header class="vk-custom-chat-header">
-          <button
-            type="button"
-            class="vk-custom-chat-back"
-            aria-label="Назад к посту"
-            onClick={props.onBack}
-          >
-            <VKIcon name="back" size={16} />
-            <span>Назад</span>
-          </button>
-
-          <div class="vk-custom-chat-header-info">
-            <div class="vk-custom-chat-title">{commentsTitle()}</div>
-            <Show when={channel()}>
-              <button
-                type="button"
-                class="vk-custom-chat-subtitle"
-                onClick={() => openVKChannelPage(props.thread!.channelPeerId)}
-              >
-                {peerTitle(channel())}
+        <Show
+          when={props.thread}
+          fallback={
+            /* шапка темы: назад к темам группы, название темы, под ним — группа */
+            <header class="vk-custom-chat-header is-dialog">
+              <button type="button" class="vk-custom-chat-back" aria-label="Вернуться к темам" onClick={() => props.onBackToTopics?.()}>
+                <VKIcon name="back" size={16} />
+                <span>Темы</span>
               </button>
-            </Show>
-          </div>
-        </header>
+              <button type="button" class="vk-custom-chat-header-info" aria-label={`Открыть страницу ${peerTitle(peer())}`} onClick={openPeerPage}>
+                <div class="vk-custom-chat-title">
+                  <span class="vk-topic-title-text">{topic()?.title ?? '…'}</span>
+                  <Show when={topic()?.pFlags?.closed}>
+                    <span class="vk-topic-title-flag" aria-label="Тема закрыта"><VKIcon name="lock" size={12} /></span>
+                  </Show>
+                </div>
+                <Show
+                  when={typing()}
+                  fallback={<div class="vk-custom-chat-subtitle">{peerTitle(peer())}</div>}
+                >
+                  <div class="vk-custom-chat-subtitle is-typing">
+                    {typing()}<span class="vk-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                  </div>
+                </Show>
+              </button>
+              <div class="vk-custom-chat-header-actions">
+                <button
+                  type="button"
+                  class="vk-custom-chat-avatar-button"
+                  aria-label={`Открыть страницу ${peerTitle(peer())}`}
+                  onClick={openPeerPage}
+                >
+                  <VKPeerAvatar peerId={props.peerId} peer={peer()} size={36} />
+                </button>
+              </div>
+            </header>
+          }
+        >
+          {/* миничат комментариев: назад к каналу, «N комментариев», под ним — название канала */}
+          <header class="vk-custom-chat-header">
+            <button
+              type="button"
+              class="vk-custom-chat-back"
+              aria-label="Назад к посту"
+              onClick={props.onBack}
+            >
+              <VKIcon name="back" size={16} />
+              <span>Назад</span>
+            </button>
+
+            <div class="vk-custom-chat-header-info">
+              <div class="vk-custom-chat-title">{commentsTitle()}</div>
+              <Show when={channel()}>
+                <button
+                  type="button"
+                  class="vk-custom-chat-subtitle"
+                  onClick={() => openVKChannelPage(props.thread!.channelPeerId)}
+                >
+                  {peerTitle(channel())}
+                </button>
+              </Show>
+            </div>
+          </header>
+        </Show>
       </Show>
 
       {/* плита закреплённого сообщения, как в Telegram: меню слева, «Закреплённое
           сообщение N из M» + превью, «×» справа; клик переходит к закрепу */}
-      <Show when={!props.thread && pinned.ready() && pinned.count() > 0 && !pinned.hidden()}>
+      <Show when={!props.thread && props.topicId === undefined && pinned.ready() && pinned.count() > 0 && !pinned.hidden()}>
         <div class="vk-custom-chat-pinned">
           <button
             type="button"
@@ -1643,7 +1788,7 @@ function VKMessagesChat(props: {
           <For each={chatItems()}>
             {(item) => item.kind === 'separator'
               ? <VKDateSeparator label={item.label} />
-              : <VKMessageRow message={item.message} album={item.album} peerId={props.peerId} isGrouped={item.isGrouped} onReply={startReply} onEdit={startEdit} onOpenComments={props.onOpenComments} readMaxId={isTicksChat() ? outboxRead() : undefined} />
+              : <VKMessageRow message={item.message} album={item.album} peerId={props.peerId} isGrouped={item.isGrouped} onReply={startReply} onEdit={startEdit} onOpenComments={props.onOpenComments} readMaxId={ticksReadMaxId()} />
             }
           </For>
         </div>
@@ -1669,6 +1814,7 @@ function VKMessagesChat(props: {
           fallback={
             <VKComposer
               peerId={props.peerId}
+              threadId={props.topicId}
               reply={replyTo()}
               editing={editing()}
               onCancelReply={() => setReplyTo(undefined)}
